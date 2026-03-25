@@ -33,8 +33,8 @@ export default async function NewSessionPage() {
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Start New Session</h1>
-        <p className="text-gray-600">Fill in the session details to create a new workshop</p>
+        <h1 className="text-2xl font-bold text-white">Start New Session</h1>
+        <p className="text-white/80">Fill in the session details to create a new workshop</p>
       </div>
       <NewSessionForm templates={templates || []} />
     </div>

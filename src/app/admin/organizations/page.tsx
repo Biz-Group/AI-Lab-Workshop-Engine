@@ -29,8 +29,8 @@ export default async function OrganizationsPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Organization</h1>
-        <p className="text-gray-600">Manage your organization settings</p>
+        <h1 className="text-2xl font-bold text-white">Organization</h1>
+        <p className="text-white/80">Manage your organization settings</p>
       </div>
 
       {organization ? (

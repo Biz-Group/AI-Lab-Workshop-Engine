@@ -45,8 +45,8 @@ export default async function TemplatesPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Templates</h1>
-          <p className="text-gray-600">Create and manage workshop templates</p>
+          <h1 className="text-2xl font-bold text-white">Templates</h1>
+          <p className="text-white/80">Create and manage workshop templates</p>
         </div>
         <Link
           href="/admin/templates/new"

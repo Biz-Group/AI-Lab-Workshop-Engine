@@ -42,19 +42,19 @@ export function Breadcrumbs() {
     <nav className="flex items-center gap-1 text-sm px-8 pt-4 pb-0">
       <Link
         href="/admin"
-        className="text-gray-400 hover:text-gray-600 transition-colors"
+        className="text-white/60 hover:text-white transition-colors"
       >
         <Home className="w-4 h-4" />
       </Link>
       {crumbs.map((crumb, index) => (
         <span key={crumb.path} className="flex items-center gap-1">
-          <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+          <ChevronRight className="w-3.5 h-3.5 text-white/40" />
           {crumb.isLast ? (
-            <span className="text-gray-700 font-medium">{crumb.label}</span>
+            <span className="text-white font-medium">{crumb.label}</span>
           ) : (
             <Link
               href={crumb.path}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-white/60 hover:text-white transition-colors"
             >
               {crumb.label}
             </Link>

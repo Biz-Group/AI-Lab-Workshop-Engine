@@ -291,19 +291,19 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-2xl font-bold text-gray-900">{template.name}</h1>
+                  <h1 className="text-2xl font-bold text-white">{template.name}</h1>
                   <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
                     template.is_published
                       ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-600'
+                      : 'bg-white/20 text-white/70'
                   }`}>
                     {template.is_published ? 'Published' : 'Draft'}
                   </span>
                 </div>
                 {template.description && (
-                  <p className="text-gray-600 mb-2">{template.description}</p>
+                  <p className="text-white/80 mb-2">{template.description}</p>
                 )}
-                <div className="flex items-center gap-4 text-sm text-gray-500">
+                <div className="flex items-center gap-4 text-sm text-white/70">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
                     {template.estimated_duration_minutes} min

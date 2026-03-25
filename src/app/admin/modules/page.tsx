@@ -37,7 +37,7 @@ export default async function ModulesPage() {
       <div className="p-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Modules</h1>
+            <h1 className="text-2xl font-bold text-white">Modules</h1>
           </div>
         </div>
         <Card>
@@ -85,8 +85,8 @@ export default async function ModulesPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Modules</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-white">Modules</h1>
+          <p className="text-white/80">
             {totalModules} module{totalModules !== 1 ? 's' : ''} across {normalizedTemplates.length} template{normalizedTemplates.length !== 1 ? 's' : ''}
           </p>
         </div>

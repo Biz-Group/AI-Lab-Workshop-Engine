@@ -57,8 +57,8 @@ export default async function SessionsPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
-          <p className="text-gray-600">View and manage your workshop sessions</p>
+          <h1 className="text-2xl font-bold text-white">Sessions</h1>
+          <p className="text-white/80">View and manage your workshop sessions</p>
         </div>
         <Link 
           href="/admin/sessions/new"

@@ -85,7 +85,7 @@ export default async function TemplateDetailPage({ params }: PageProps) {
       <div className="mb-6">
         <Link
           href="/admin/templates"
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Templates
