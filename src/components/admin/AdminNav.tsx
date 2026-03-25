@@ -32,7 +32,7 @@ const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/organizations', label: 'Organization', icon: Building2 },
   { href: '/admin/templates', label: 'Templates', icon: FileText },
-  { href: '/admin/modules', label: 'Modules', icon: Layers },
+  { href: '/admin/modules', label: 'Activities', icon: Layers },
   { href: '/admin/sessions', label: 'Sessions', icon: PlayCircle },
 ];
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
+import { syncModuleToLibrary } from '@/lib/utils/library-sync';
 import { z } from 'zod';
 
 const createModuleSchema = z.object({
@@ -76,6 +77,10 @@ export async function POST(request: NextRequest) {
 
     revalidatePath('/admin/modules');
     revalidatePath('/admin/templates');
+
+    // Sync new module to library
+    await syncModuleToLibrary(serviceClient, mod.id, facilitator.organization_id);
+
     return NextResponse.json({ success: true, data: mod });
   } catch (error) {
     console.error('Modules POST error:', error);

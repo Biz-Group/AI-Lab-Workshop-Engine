@@ -8,7 +8,7 @@ const labelMap: Record<string, string> = {
   admin: 'Dashboard',
   sessions: 'Sessions',
   templates: 'Templates',
-  modules: 'Modules',
+  modules: 'Activity Library',
   organizations: 'Organization',
   new: 'Create New',
 };

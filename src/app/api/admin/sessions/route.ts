@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       const [stepsResult, blocksResult] = await Promise.all([
         serviceClient
           .from('module_steps')
-          .select('id, module_id, title, instruction_markdown, order_index, estimated_minutes, is_required')
+          .select('id, module_id, title, instruction_markdown, order_index, estimated_minutes, is_required, ai_tool_name, ai_tool_url')
           .in('module_id', moduleIds)
           .order('order_index'),
         serviceClient
@@ -172,6 +172,8 @@ export async function POST(request: NextRequest) {
             order_index: step.order_index,
             estimated_minutes: step.estimated_minutes,
             is_required: step.is_required,
+            ai_tool_name: step.ai_tool_name ?? template.ai_tool_name ?? 'ChatGPT',
+            ai_tool_url: step.ai_tool_url ?? template.ai_tool_url ?? 'https://chat.openai.com',
           }));
 
         const { data: snapSteps } = await serviceClient

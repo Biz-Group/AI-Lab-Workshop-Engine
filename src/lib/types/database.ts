@@ -128,6 +128,8 @@ export interface ModuleStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  ai_tool_name: string | null;
+  ai_tool_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -139,6 +141,8 @@ export interface ModuleStepInsert {
   order_index: number;
   estimated_minutes?: number | null;
   is_required?: boolean;
+  ai_tool_name?: string | null;
+  ai_tool_url?: string | null;
 }
 
 export interface ModuleStepWithBlocks extends ModuleStep {
@@ -248,6 +252,8 @@ export interface SessionSnapshotStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  ai_tool_name: string;
+  ai_tool_url: string;
   created_at: string;
 }
 
@@ -375,6 +381,79 @@ export interface Vote {
 export interface VoteInsert {
   participant_id: string;
   submission_id: string;
+}
+
+// ============================================================================
+// Activity Library Types
+// ============================================================================
+
+export interface LibraryActivity {
+  id: string;
+  organization_id: string;
+  title: string;
+  objective: string | null;
+  source_module_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryActivityInsert {
+  organization_id: string;
+  title: string;
+  objective?: string | null;
+  source_module_id?: string | null;
+}
+
+export interface LibraryActivityStep {
+  id: string;
+  activity_id: string;
+  title: string;
+  instruction_markdown: string;
+  order_index: number;
+  estimated_minutes: number | null;
+  is_required: boolean;
+  ai_tool_name: string | null;
+  ai_tool_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryActivityStepInsert {
+  activity_id: string;
+  title: string;
+  instruction_markdown?: string;
+  order_index: number;
+  estimated_minutes?: number | null;
+  is_required?: boolean;
+  ai_tool_name?: string | null;
+  ai_tool_url?: string | null;
+}
+
+export interface LibraryActivityPromptBlock {
+  id: string;
+  library_step_id: string;
+  title: string;
+  content_markdown: string;
+  order_index: number;
+  is_copyable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryActivityPromptBlockInsert {
+  library_step_id: string;
+  title: string;
+  content_markdown: string;
+  order_index: number;
+  is_copyable?: boolean;
+}
+
+export interface LibraryActivityWithSteps extends LibraryActivity {
+  steps: LibraryActivityStepWithBlocks[];
+}
+
+export interface LibraryActivityStepWithBlocks extends LibraryActivityStep {
+  prompt_blocks: LibraryActivityPromptBlock[];
 }
 
 // ============================================================================

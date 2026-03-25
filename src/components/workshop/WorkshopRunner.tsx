@@ -50,6 +50,8 @@ interface Step {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  ai_tool_name?: string;
+  ai_tool_url?: string;
   prompt_blocks: PromptBlockType[];
 }
 
@@ -339,7 +341,8 @@ export function WorkshopRunner({
 
   // Open AI Tool
   const openAITool = () => {
-    window.open(initialSession.aiToolUrl || 'https://chat.openai.com', '_blank');
+    const toolUrl = currentStep?.ai_tool_url || initialSession.aiToolUrl || 'https://chat.openai.com';
+    window.open(toolUrl, '_blank');
     logEvent('chatgpt_opened', { step_id: currentStep?.id });
   };
 
@@ -662,7 +665,7 @@ export function WorkshopRunner({
               onClick={openAITool}
             >
               <ExternalLink className="w-4 h-4 mr-2" />
-              Open {initialSession.aiToolName || 'ChatGPT'}
+              Open {currentStep?.ai_tool_name || initialSession.aiToolName || 'ChatGPT'}
             </Button>
 
             {/* Submission Area (for required steps or last step) */}

@@ -18,6 +18,7 @@ import {
   MessageSquareText,
   ExternalLink,
   BookOpen,
+  BookmarkPlus,
 } from 'lucide-react';
 import { Card, CardContent, Button, Input, TextArea, Modal, ConfirmModal } from '@/components/ui';
 import { TemplatePreview } from './TemplatePreview';
@@ -39,6 +40,8 @@ interface Step {
   estimated_minutes: number | null;
   is_required: boolean;
   order_index: number;
+  ai_tool_name: string | null;
+  ai_tool_url: string | null;
   prompt_blocks: PromptBlock[];
 }
 
@@ -121,10 +124,10 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
   };
 
   // ── Granular state updaters (no more router.refresh) ──────────────
-  const handleModuleAdded = useCallback((newModule: { id: string; title: string; objective: string | null; order_index: number }) => {
+  const handleModuleAdded = useCallback((newModule: { id: string; title: string; objective: string | null; order_index: number; steps?: Step[] }) => {
     setTemplate(prev => ({
       ...prev,
-      modules: [...prev.modules, { ...newModule, steps: [] }],
+      modules: [...prev.modules, { ...newModule, steps: newModule.steps ?? [] }],
     }));
   }, []);
 
@@ -142,7 +145,7 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     }));
   }, []);
 
-  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean }) => {
+  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => {
     setTemplate(prev => ({
       ...prev,
       modules: prev.modules.map(m =>
@@ -291,24 +294,24 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-2xl font-bold text-white">{template.name}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{template.name}</h1>
                   <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
                     template.is_published
                       ? 'bg-green-100 text-green-700'
-                      : 'bg-white/20 text-white/70'
+                      : 'bg-gray-100 text-gray-600'
                   }`}>
                     {template.is_published ? 'Published' : 'Draft'}
                   </span>
                 </div>
                 {template.description && (
-                  <p className="text-white/80 mb-2">{template.description}</p>
+                  <p className="text-gray-600 mb-2">{template.description}</p>
                 )}
-                <div className="flex items-center gap-4 text-sm text-white/70">
+                <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
                     {template.estimated_duration_minutes} min
                   </span>
-                  <span>{template.modules.length} modules</span>
+                  <span>{template.modules.length} activities</span>
                   <span className="inline-flex items-center gap-1">
                     <ExternalLink className="w-3.5 h-3.5" />
                     {template.ai_tool_name || 'ChatGPT'}
@@ -337,13 +340,13 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
 
       {/* Modules */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Modules</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Activities</h2>
 
         {template.modules.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
               <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-600 mb-4">No modules yet. Add your first module to get started.</p>
+              <p className="text-gray-600 mb-4">No activities yet. Add your first activity to get started.</p>
             </CardContent>
           </Card>
         ) : (
@@ -386,12 +389,41 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
 function AddModuleButton({ templateId, currentCount, onAdded }: {
   templateId: string;
   currentCount: number;
-  onAdded: (newModule: { id: string; title: string; objective: string | null; order_index: number }) => void;
+  onAdded: (newModule: { id: string; title: string; objective: string | null; order_index: number; steps?: Step[] }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'new' | 'library'>('new');
   const [title, setTitle] = useState('');
   const [objective, setObjective] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Library tab state
+  const [libraryActivities, setLibraryActivities] = useState<Array<{ id: string; title: string; objective: string | null; step_count: number }>>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [isInserting, setIsInserting] = useState<string | null>(null);
+
+  const loadLibrary = async () => {
+    if (libraryLoaded) return;
+    setIsLoadingLibrary(true);
+    try {
+      const res = await fetch('/api/admin/library');
+      const data = await res.json();
+      if (data.success) {
+        setLibraryActivities(data.data);
+        setLibraryLoaded(true);
+      }
+    } catch {
+      toast.error('Failed to load library');
+    } finally {
+      setIsLoadingLibrary(false);
+    }
+  };
+
+  const handleTabChange = (tab: 'new' | 'library') => {
+    setActiveTab(tab);
+    if (tab === 'library') loadLibrary();
+  };
 
   const handleAdd = async () => {
     if (!title.trim()) return;
@@ -408,7 +440,7 @@ function AddModuleButton({ templateId, currentCount, onAdded }: {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      toast.success('Module added');
+      toast.success('Activity added');
       onAdded({
         id: data.data.id,
         title: data.data.title,
@@ -419,10 +451,40 @@ function AddModuleButton({ templateId, currentCount, onAdded }: {
       setObjective('');
       setIsOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add module');
+      toast.error(err instanceof Error ? err.message : 'Failed to add activity');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleInsertFromLibrary = async (activityId: string) => {
+    setIsInserting(activityId);
+    try {
+      const res = await fetch('/api/admin/library/insert-into-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activity_id: activityId,
+          template_id: templateId,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success('Activity added from library');
+      onAdded(data.data);
+      setIsOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add from library');
+    } finally {
+      setIsInserting(null);
+    }
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setTitle('');
+    setObjective('');
+    setActiveTab('new');
   };
 
   return (
@@ -434,31 +496,102 @@ function AddModuleButton({ templateId, currentCount, onAdded }: {
         <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center shrink-0 group-hover:bg-brand-200 transition-colors">
           <Layers className="w-4.5 h-4.5 text-brand-600" />
         </div>
-        <span className="flex-1 text-left text-sm font-medium text-gray-500 group-hover:text-brand-700 transition-colors">Add a module…</span>
+        <span className="flex-1 text-left text-sm font-medium text-gray-500 group-hover:text-brand-700 transition-colors">Add an activity…</span>
         <Plus className="w-4 h-4 text-gray-400 group-hover:text-brand-600 transition-colors" />
       </button>
-      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setObjective(''); }} title="Add Module">
-        <div className="space-y-4">
-          <Input
-            label="Module Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Introduction"
-          />
-          <TextArea
-            label="Objective (optional)"
-            value={objective}
-            onChange={(e) => setObjective(e.target.value)}
-            rows={2}
-            placeholder="What participants will learn"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setObjective(''); }}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={!title.trim() || isSaving}>
-              {isSaving ? 'Adding...' : 'Add Module'}
-            </Button>
-          </div>
+      <Modal isOpen={isOpen} onClose={handleClose} title="Add Activity">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 mb-4">
+          <button
+            onClick={() => handleTabChange('new')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'new'
+                ? 'border-brand-600 text-brand-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            New Activity
+          </button>
+          <button
+            onClick={() => handleTabChange('library')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'library'
+                ? 'border-brand-600 text-brand-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            From Library
+          </button>
         </div>
+
+        {activeTab === 'new' ? (
+          <div className="space-y-4">
+            <Input
+              label="Activity Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Introduction"
+            />
+            <TextArea
+              label="Objective (optional)"
+              value={objective}
+              onChange={(e) => setObjective(e.target.value)}
+              rows={2}
+              placeholder="What participants will learn"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+              <Button onClick={handleAdd} disabled={!title.trim() || isSaving}>
+                {isSaving ? 'Adding...' : 'Add Activity'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {isLoadingLibrary ? (
+              <div className="py-8 text-center">
+                <div className="animate-spin w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Loading library…</p>
+              </div>
+            ) : libraryActivities.length === 0 ? (
+              <div className="py-8 text-center">
+                <Layers className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm text-gray-500 mb-2">No activities in the library yet.</p>
+                <p className="text-xs text-gray-400">Save activities from templates or create them in the Activity Library.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {libraryActivities.map((activity) => (
+                  <button
+                    key={activity.id}
+                    onClick={() => handleInsertFromLibrary(activity.id)}
+                    disabled={!!isInserting}
+                    className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50/50 transition-all disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm text-gray-900 truncate">{activity.title}</div>
+                        {activity.objective && (
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">{activity.objective}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-3 shrink-0">
+                        <span className="text-xs text-gray-400">
+                          {activity.step_count} step{activity.step_count !== 1 ? 's' : ''}
+                        </span>
+                        {isInserting === activity.id ? (
+                          <div className="animate-spin w-4 h-4 border-2 border-brand-600 border-t-transparent rounded-full" />
+                        ) : (
+                          <Plus className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </>
   );
@@ -471,7 +604,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
   templateId: string;
   onModuleUpdated: (moduleId: string, updates: Partial<Module>) => void;
   onModuleDeleted: (moduleId: string) => void;
-  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean }) => void;
+  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
@@ -484,6 +617,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [editForm, setEditForm] = useState({ title: mod.title, objective: mod.objective || '' });
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -498,7 +632,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      toast.success('Module updated');
+      toast.success('Activity updated');
       setIsEditing(false);
       onModuleUpdated(mod.id, { title: editForm.title.trim(), objective: editForm.objective.trim() || null });
     } catch (err) {
@@ -514,7 +648,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
       const res = await fetch(`/api/admin/modules/${mod.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      toast.success('Module deleted');
+      toast.success('Activity deleted');
       onModuleDeleted(mod.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete');
@@ -523,10 +657,28 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
     }
   };
 
+  const handleSaveToLibrary = async () => {
+    setIsSavingToLibrary(true);
+    try {
+      const res = await fetch('/api/admin/library/save-from-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_id: mod.id }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success('Saved to library');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save to library');
+    } finally {
+      setIsSavingToLibrary(false);
+    }
+  };
+
   return (
     <Card>
       <div className="border-l-4 border-brand-500">
-        {/* Module Header */}
+        {/* Activity Header */}
         <div className="p-4 bg-gradient-to-r from-brand-50/60 to-transparent flex items-center justify-between">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -543,7 +695,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-brand-600 uppercase tracking-wider">
-                  Module {displayIndex}
+                  Activity {displayIndex}
                 </span>
                 <h3 className="font-semibold text-gray-900 truncate">{mod.title}</h3>
               </div>
@@ -566,19 +718,27 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
               )}
             </div>
             <button
+              onClick={handleSaveToLibrary}
+              disabled={isSavingToLibrary}
+              className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors disabled:opacity-50"
+              title="Save to library"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => {
                 setEditForm({ title: mod.title, objective: mod.objective || '' });
                 setIsEditing(true);
               }}
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-              title="Edit module"
+              title="Edit activity"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setIsDeleting(true)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-              title="Delete module"
+              title="Delete activity"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -590,7 +750,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
           <div className="px-4 pb-4">
             <div className="border-t border-gray-200 pt-4">
               {mod.steps.length === 0 ? (
-                <p className="text-sm text-gray-500 italic py-2 pl-6">No steps in this module yet. Add your first step below.</p>
+                <p className="text-sm text-gray-500 italic py-2 pl-6">No steps in this activity yet. Add your first step below.</p>
               ) : (
                 <div className="pl-4 space-y-3">
                   <div className="flex items-center gap-2 mb-1">
@@ -620,7 +780,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
       </div>
 
       {/* Edit Module Modal */}
-      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit Module">
+      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit Activity">
         <div className="space-y-4">
           <Input
             label="Title"
@@ -647,9 +807,9 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
         isOpen={isDeleting}
         onClose={() => setIsDeleting(false)}
         onConfirm={handleDelete}
-        title="Delete Module"
+        title="Delete Activity"
         description={`Delete "${mod.title}" and all its steps and prompt blocks? This cannot be undone.`}
-        confirmText="Delete Module"
+        confirmText="Delete Activity"
         variant="danger"
         isLoading={isDeleteLoading}
       />
@@ -676,22 +836,29 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
     instruction_markdown: step.instruction_markdown || '',
     estimated_minutes: step.estimated_minutes,
     is_required: step.is_required,
+    ai_tool_name: step.ai_tool_name || '',
+    ai_tool_url: step.ai_tool_url || '',
   });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const payload = {
+        ...editForm,
+        ai_tool_name: editForm.ai_tool_name.trim() || null,
+        ai_tool_url: editForm.ai_tool_url.trim() || null,
+      };
       const res = await fetch(`/api/admin/steps/${step.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       toast.success('Step updated');
       setIsEditing(false);
-      onStepUpdated(moduleId, step.id, editForm);
+      onStepUpdated(moduleId, step.id, payload);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update step');
     } finally {
@@ -752,6 +919,8 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
                 instruction_markdown: step.instruction_markdown || '',
                 estimated_minutes: step.estimated_minutes,
                 is_required: step.is_required,
+                ai_tool_name: step.ai_tool_name || '',
+                ai_tool_url: step.ai_tool_url || '',
               });
               setIsEditing(true);
             }}
@@ -846,6 +1015,20 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
             />
             Required step
           </label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="AI Tool Button Label (optional)"
+              value={editForm.ai_tool_name}
+              onChange={(e) => setEditForm(prev => ({ ...prev, ai_tool_name: e.target.value }))}
+              placeholder={`Inherited from template`}
+            />
+            <Input
+              label="AI Tool URL (optional)"
+              value={editForm.ai_tool_url}
+              onChange={(e) => setEditForm(prev => ({ ...prev, ai_tool_url: e.target.value }))}
+              placeholder={`Inherited from template`}
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setIsEditing(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={!editForm.title.trim() || isSaving}>
@@ -1010,13 +1193,15 @@ function PromptBlockRow({ block, moduleId, stepId, onBlockUpdated, onBlockDelete
 function AddStepButton({ moduleId, currentCount, onAdded }: {
   moduleId: string;
   currentCount: number;
-  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean }) => void;
+  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [instructionMarkdown, setInstructionMarkdown] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState(5);
   const [isRequired, setIsRequired] = useState(false);
+  const [aiToolName, setAiToolName] = useState('');
+  const [aiToolUrl, setAiToolUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = async () => {
@@ -1032,6 +1217,8 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
           instruction_markdown: instructionMarkdown.trim() || '',
           estimated_minutes: estimatedMinutes,
           is_required: isRequired,
+          ai_tool_name: aiToolName.trim() || null,
+          ai_tool_url: aiToolUrl.trim() || null,
         }),
       });
       const data = await res.json();
@@ -1044,11 +1231,15 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
         instruction_markdown: instructionMarkdown.trim() || '',
         estimated_minutes: estimatedMinutes,
         is_required: isRequired,
+        ai_tool_name: aiToolName.trim() || null,
+        ai_tool_url: aiToolUrl.trim() || null,
       });
       setTitle('');
       setInstructionMarkdown('');
       setEstimatedMinutes(5);
       setIsRequired(false);
+      setAiToolName('');
+      setAiToolUrl('');
       setIsOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add step');
@@ -1069,7 +1260,7 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
         <span className="text-xs font-medium text-gray-500 group-hover:text-brand-700 transition-colors">Add Step</span>
         <Plus className="w-3 h-3 ml-auto text-gray-400 group-hover:text-brand-600 transition-colors" />
       </button>
-      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); }} title="Add Step">
+      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setAiToolName(''); setAiToolUrl(''); }} title="Add Step">
         <div className="space-y-4">
           <Input
             label="Step Title"
@@ -1099,8 +1290,22 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
             />
             Required step
           </label>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="AI Tool Button Label (optional)"
+              value={aiToolName}
+              onChange={(e) => setAiToolName(e.target.value)}
+              placeholder="Inherited from template"
+            />
+            <Input
+              label="AI Tool URL (optional)"
+              value={aiToolUrl}
+              onChange={(e) => setAiToolUrl(e.target.value)}
+              placeholder="Inherited from template"
+            />
+          </div>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setAiToolName(''); setAiToolUrl(''); }}>Cancel</Button>
             <Button onClick={handleAdd} disabled={!title.trim() || isSaving}>
               {isSaving ? 'Adding...' : 'Add Step'}
             </Button>

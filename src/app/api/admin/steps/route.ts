@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
+import { syncModuleToLibrary } from '@/lib/utils/library-sync';
 import { z } from 'zod';
 
 const createStepSchema = z.object({
@@ -10,6 +11,8 @@ const createStepSchema = z.object({
   estimated_minutes: z.number().int().min(1).max(120).nullable().optional(),
   is_required: z.boolean().default(false),
   order_index: z.number().int().min(0).optional(),
+  ai_tool_name: z.string().max(100).nullable().optional(),
+  ai_tool_url: z.string().url().max(2000).nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -65,8 +68,10 @@ export async function POST(request: NextRequest) {
         estimated_minutes: validation.data.estimated_minutes ?? null,
         is_required: validation.data.is_required,
         order_index: orderIndex,
+        ai_tool_name: validation.data.ai_tool_name ?? null,
+        ai_tool_url: validation.data.ai_tool_url ?? null,
       })
-      .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required')
+      .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required, ai_tool_name, ai_tool_url')
       .single();
 
     if (error) {
@@ -76,6 +81,18 @@ export async function POST(request: NextRequest) {
 
     revalidatePath('/admin/modules');
     revalidatePath('/admin/templates');
+
+    // Sync parent module to library
+    const { data: modForSync } = await serviceClient
+      .from('modules')
+      .select('template:workshop_templates!inner(organization_id)')
+      .eq('id', validation.data.module_id)
+      .single();
+    if (modForSync) {
+      const tmpl = modForSync.template as unknown as { organization_id: string };
+      await syncModuleToLibrary(serviceClient, validation.data.module_id, tmpl.organization_id);
+    }
+
     return NextResponse.json({ success: true, data: step });
   } catch (error) {
     console.error('Steps POST error:', error);

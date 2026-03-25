@@ -33,6 +33,8 @@ interface Step {
   estimated_minutes: number | null;
   is_required: boolean;
   order_index: number;
+  ai_tool_name?: string | null;
+  ai_tool_url?: string | null;
   prompt_blocks: PromptBlockType[];
 }
 
@@ -381,10 +383,10 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => window.open(aiToolUrl, '_blank')}
+              onClick={() => window.open(currentStep.ai_tool_url || aiToolUrl, '_blank')}
             >
               <ExternalLink className="w-4 h-4 mr-2" />
-              Open {aiToolName}
+              Open {currentStep.ai_tool_name || aiToolName}
             </Button>
           </div>
         </div>

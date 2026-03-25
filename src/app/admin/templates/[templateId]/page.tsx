@@ -45,6 +45,8 @@ export default async function TemplateDetailPage({ params }: PageProps) {
           estimated_minutes,
           is_required,
           order_index,
+          ai_tool_name,
+          ai_tool_url,
           prompt_blocks(
             id,
             title,

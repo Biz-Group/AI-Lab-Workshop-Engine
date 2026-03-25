@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
-import { syncModuleToLibrary, getModuleIdFromBlock } from '@/lib/utils/library-sync';
 import { z } from 'zod';
 
 const updateBlockSchema = z.object({
@@ -11,9 +10,28 @@ const updateBlockSchema = z.object({
   order_index: z.number().int().min(0).optional(),
 });
 
+async function verifyBlockAccess(serviceClient: Awaited<ReturnType<typeof createServiceClient>>, blockId: string, userId: string) {
+  const { data } = await serviceClient
+    .from('activity_library_prompt_blocks')
+    .select(`
+      id,
+      step:activity_library_steps!inner(
+        activity:activity_library!inner(
+          organization:organizations!inner(
+            facilitator_users!inner(user_id)
+          )
+        )
+      )
+    `)
+    .eq('id', blockId)
+    .eq('step.activity.organization.facilitator_users.user_id', userId)
+    .single();
+  return data;
+}
+
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ blockId: string }> }
+  { params }: { params: Promise<{ activityId: string; stepId: string; blockId: string }> }
 ) {
   try {
     const supabase = await createServerClient();
@@ -25,25 +43,8 @@ export async function PATCH(
     const { blockId } = await params;
     const serviceClient = await createServiceClient();
 
-    const { data: block } = await serviceClient
-      .from('prompt_blocks')
-      .select(`
-        id,
-        step:module_steps!inner(
-          module:modules!inner(
-            template:workshop_templates!inner(
-              organization:organizations!inner(
-                facilitator_users!inner(user_id)
-              )
-            )
-          )
-        )
-      `)
-      .eq('id', blockId)
-      .eq('step.module.template.organization.facilitator_users.user_id', user.id)
-      .single();
-
-    if (!block) {
+    const access = await verifyBlockAccess(serviceClient, blockId, user.id);
+    if (!access) {
       return NextResponse.json({ success: false, error: 'Prompt block not found or access denied' }, { status: 404 });
     }
 
@@ -55,7 +56,7 @@ export async function PATCH(
     }
 
     const { error } = await serviceClient
-      .from('prompt_blocks')
+      .from('activity_library_prompt_blocks')
       .update(validation.data)
       .eq('id', blockId);
 
@@ -63,24 +64,17 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Failed to update prompt block' }, { status: 500 });
     }
 
-    revalidatePath('/admin/templates');
-
-    // Sync parent module to library
-    const modInfo = await getModuleIdFromBlock(serviceClient, blockId);
-    if (modInfo) {
-      await syncModuleToLibrary(serviceClient, modInfo.moduleId, modInfo.organizationId);
-    }
-
+    revalidatePath('/admin/modules');
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Block PATCH error:', error);
+    console.error('Library block PATCH error:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ blockId: string }> }
+  { params }: { params: Promise<{ activityId: string; stepId: string; blockId: string }> }
 ) {
   try {
     const supabase = await createServerClient();
@@ -92,33 +86,13 @@ export async function DELETE(
     const { blockId } = await params;
     const serviceClient = await createServiceClient();
 
-    const { data: block } = await serviceClient
-      .from('prompt_blocks')
-      .select(`
-        id,
-        step:module_steps!inner(
-          module:modules!inner(
-            template:workshop_templates!inner(
-              organization:organizations!inner(
-                facilitator_users!inner(user_id)
-              )
-            )
-          )
-        )
-      `)
-      .eq('id', blockId)
-      .eq('step.module.template.organization.facilitator_users.user_id', user.id)
-      .single();
-
-    if (!block) {
+    const access = await verifyBlockAccess(serviceClient, blockId, user.id);
+    if (!access) {
       return NextResponse.json({ success: false, error: 'Prompt block not found or access denied' }, { status: 404 });
     }
 
-    // Capture module info before delete
-    const modInfo = await getModuleIdFromBlock(serviceClient, blockId);
-
     const { error } = await serviceClient
-      .from('prompt_blocks')
+      .from('activity_library_prompt_blocks')
       .delete()
       .eq('id', blockId);
 
@@ -126,16 +100,10 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Failed to delete prompt block' }, { status: 500 });
     }
 
-    revalidatePath('/admin/templates');
-
-    // Sync parent module to library
-    if (modInfo) {
-      await syncModuleToLibrary(serviceClient, modInfo.moduleId, modInfo.organizationId);
-    }
-
+    revalidatePath('/admin/modules');
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Block DELETE error:', error);
+    console.error('Library block DELETE error:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
