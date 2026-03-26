@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
 import { Plus, PlayCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui';
 import { getJoinField } from '@/lib/utils/supabase-join';
@@ -31,12 +31,21 @@ export default async function SessionsPage() {
       department,
       location,
       poc_name,
+      poc_email,
       event_type,
       event_date,
       template:workshop_templates(name)
     `)
     .eq('organization_id', orgId || '')
     .order('created_at', { ascending: false });
+
+  // Fetch approved clients for the org
+  const serviceClient = await createServiceClient();
+  const { data: clients } = await serviceClient
+    .from('approved_clients')
+    .select('id, name, poc_name, poc_email')
+    .eq('organization_id', orgId || '')
+    .order('name');
 
   // Normalize for client component
   const normalizedSessions = (sessions || []).map((s) => ({
@@ -48,6 +57,7 @@ export default async function SessionsPage() {
     department: s.department as string | null,
     location: s.location as string | null,
     poc_name: s.poc_name as string | null,
+    poc_email: s.poc_email as string | null,
     event_type: s.event_type as string | null,
     event_date: s.event_date as string | null,
     template_name: getJoinField(s.template, 'name') as string || 'Unknown Template',
@@ -70,7 +80,7 @@ export default async function SessionsPage() {
       </div>
 
       {normalizedSessions.length > 0 ? (
-        <SessionsTable sessions={normalizedSessions} />
+        <SessionsTable sessions={normalizedSessions} clients={clients || []} />
       ) : (
         <Card>
           <CardContent className="p-12 text-center">

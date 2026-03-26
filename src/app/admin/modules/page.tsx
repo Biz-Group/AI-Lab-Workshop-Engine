@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Layers, Plus, ListChecks, Pencil, Trash2, Clock } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Layers, Plus, ListChecks, Pencil, Trash2, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal } from 'lucide-react';
 import { Card, CardContent, Button, Input, TextArea, Modal, ConfirmModal } from '@/components/ui';
+import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -29,6 +30,20 @@ interface TemplateGroup {
   modules: TemplateModule[];
 }
 
+// Flattened row for the template activities table
+interface TemplateActivityRow {
+  moduleId: string;
+  templateId: string;
+  templateName: string;
+  title: string;
+  objective: string | null;
+  step_count: number;
+}
+
+type LibrarySortKey = 'title' | 'step_count' | 'created_at';
+type TemplateSortKey = 'templateName' | 'title' | 'step_count';
+type SortDir = 'asc' | 'desc';
+
 export default function ModulesPage() {
   const [activities, setActivities] = useState<LibraryActivitySummary[]>([]);
   const [templates, setTemplates] = useState<TemplateGroup[]>([]);
@@ -39,6 +54,18 @@ export default function ModulesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Library sort state
+  const [libSortKey, setLibSortKey] = useState<LibrarySortKey>('created_at');
+  const [libSortDir, setLibSortDir] = useState<SortDir>('desc');
+  const [libMenuId, setLibMenuId] = useState<string | null>(null);
+  const [libMenuPos, setLibMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Template sort state
+  const [tmplSortKey, setTmplSortKey] = useState<TemplateSortKey>('templateName');
+  const [tmplSortDir, setTmplSortDir] = useState<SortDir>('asc');
+  const [tmplMenuId, setTmplMenuId] = useState<string | null>(null);
+  const [tmplMenuPos, setTmplMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const loadActivities = useCallback(async () => {
     try {
@@ -58,6 +85,105 @@ export default function ModulesPage() {
   useEffect(() => {
     loadActivities();
   }, [loadActivities]);
+
+  // Library sorting
+  const toggleLibSort = (key: LibrarySortKey) => {
+    if (libSortKey === key) {
+      setLibSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setLibSortKey(key);
+      setLibSortDir('asc');
+    }
+  };
+
+  const sortedLibrary = useMemo(() => {
+    return [...activities].sort((a, b) => {
+      if (libSortKey === 'created_at') {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return libSortDir === 'asc' ? aTime - bTime : bTime - aTime;
+      }
+      if (libSortKey === 'step_count') {
+        return libSortDir === 'asc' ? a.step_count - b.step_count : b.step_count - a.step_count;
+      }
+      const aVal = String(a[libSortKey]).toLowerCase();
+      const bVal = String(b[libSortKey]).toLowerCase();
+      if (aVal < bVal) return libSortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return libSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [activities, libSortKey, libSortDir]);
+
+  const LibSortIcon = ({ column }: { column: LibrarySortKey }) => {
+    if (libSortKey !== column) return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />;
+    return libSortDir === 'asc'
+      ? <ArrowUp className="w-3.5 h-3.5 text-brand-600" />
+      : <ArrowDown className="w-3.5 h-3.5 text-brand-600" />;
+  };
+
+  // Template sorting
+  const toggleTmplSort = (key: TemplateSortKey) => {
+    if (tmplSortKey === key) {
+      setTmplSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setTmplSortKey(key);
+      setTmplSortDir('asc');
+    }
+  };
+
+  const templateRows = useMemo<TemplateActivityRow[]>(() => {
+    return templates.flatMap(t =>
+      t.modules.map(mod => ({
+        moduleId: mod.id,
+        templateId: t.id,
+        templateName: t.name,
+        title: mod.title,
+        objective: mod.objective,
+        step_count: mod.step_count,
+      }))
+    );
+  }, [templates]);
+
+  const sortedTemplateRows = useMemo(() => {
+    return [...templateRows].sort((a, b) => {
+      if (tmplSortKey === 'step_count') {
+        return tmplSortDir === 'asc' ? a.step_count - b.step_count : b.step_count - a.step_count;
+      }
+      const aVal = String(a[tmplSortKey]).toLowerCase();
+      const bVal = String(b[tmplSortKey]).toLowerCase();
+      if (aVal < bVal) return tmplSortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return tmplSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [templateRows, tmplSortKey, tmplSortDir]);
+
+  const TmplSortIcon = ({ column }: { column: TemplateSortKey }) => {
+    if (tmplSortKey !== column) return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />;
+    return tmplSortDir === 'asc'
+      ? <ArrowUp className="w-3.5 h-3.5 text-brand-600" />
+      : <ArrowDown className="w-3.5 h-3.5 text-brand-600" />;
+  };
+
+  // Dropdown menus
+  const openLibMenu = useCallback((id: string, btnEl: HTMLButtonElement) => {
+    if (libMenuId === id) { setLibMenuId(null); return; }
+    const rect = btnEl.getBoundingClientRect();
+    const menuHeight = 88;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < menuHeight ? rect.top - menuHeight : rect.bottom + 4;
+    setLibMenuPos({ top, left: rect.right - 144 });
+    setLibMenuId(id);
+  }, [libMenuId]);
+
+  const openTmplMenu = useCallback((id: string, btnEl: HTMLButtonElement) => {
+    if (tmplMenuId === id) { setTmplMenuId(null); return; }
+    const rect = btnEl.getBoundingClientRect();
+    const menuHeight = 44;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < menuHeight ? rect.top - menuHeight : rect.bottom + 4;
+    setTmplMenuPos({ top, left: rect.right - 160 });
+    setTmplMenuId(id);
+  }, [tmplMenuId]);
 
   const handleCreate = async () => {
     if (!title.trim()) return;
@@ -102,6 +228,18 @@ export default function ModulesPage() {
     }
   };
 
+  const libColumns: { key: LibrarySortKey; label: string }[] = [
+    { key: 'title', label: 'Title' },
+    { key: 'step_count', label: 'Steps' },
+    { key: 'created_at', label: 'Created' },
+  ];
+
+  const tmplColumns: { key: TemplateSortKey; label: string }[] = [
+    { key: 'templateName', label: 'Template' },
+    { key: 'title', label: 'Title' },
+    { key: 'step_count', label: 'Steps' },
+  ];
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -127,7 +265,7 @@ export default function ModulesPage() {
         </Card>
       ) : (
         <>
-          {/* Library Activities Section */}
+          {/* Library Activities Table */}
           <div className="mb-10">
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-lg font-semibold text-white">Library</h2>
@@ -147,107 +285,178 @@ export default function ModulesPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-3">
-                {activities.map((activity) => (
-                  <Card key={activity.id} className="hover:shadow-sm transition-shadow">
-                    <div className="p-4 flex items-center justify-between">
-                      <Link
-                        href={`/admin/modules/${activity.id}`}
-                        className="flex items-center gap-4 flex-1 min-w-0"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                          <Layers className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="font-medium text-gray-900 truncate">{activity.title}</h3>
-                          {activity.objective && (
-                            <p className="text-sm text-gray-500 mt-0.5 truncate">{activity.objective}</p>
-                          )}
-                        </div>
-                      </Link>
-                      <div className="flex items-center gap-3 ml-4">
-                        <span className="inline-flex items-center gap-1 text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                          <ListChecks className="w-3 h-3" />
-                          {activity.step_count} step{activity.step_count !== 1 ? 's' : ''}
-                        </span>
-                        <Link
-                          href={`/admin/modules/${activity.id}`}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                          title="Edit activity"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Link>
-                        <button
-                          onClick={() => setDeleteId(activity.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Delete activity"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        {libColumns.map((col) => (
+                          <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
+                            <button
+                              type="button"
+                              onClick={() => toggleLibSort(col.key)}
+                              className="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                            >
+                              {col.label}
+                              <LibSortIcon column={col.key} />
+                            </button>
+                          </th>
+                        ))}
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Objective</th>
+                        <th className="px-4 py-3 font-medium text-gray-600 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {sortedLibrary.map((activity) => (
+                        <tr key={activity.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{activity.title}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            <span className="inline-flex items-center gap-1">
+                              <ListChecks className="w-3.5 h-3.5 text-gray-400" />
+                              {activity.step_count}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">
+                            {formatDateTime(activity.created_at)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-sm max-w-xs truncate">
+                            {activity.objective || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end">
+                              <button
+                                onClick={(e) => openLibMenu(activity.id, e.currentTarget)}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="More actions"
+                              >
+                                <MoreHorizontal className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             )}
           </div>
 
-          {/* Template Activities Section */}
-          {templates.filter(t => t.modules.length > 0).length > 0 && (
+          {/* Library dropdown menu */}
+          {libMenuId && libMenuPos && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setLibMenuId(null)} />
+              <div
+                className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-36"
+                style={{ top: libMenuPos.top, left: libMenuPos.left }}
+              >
+                <Link
+                  href={`/admin/modules/${libMenuId}`}
+                  onClick={() => setLibMenuId(null)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </Link>
+                <button
+                  onClick={() => {
+                    setDeleteId(libMenuId);
+                    setLibMenuId(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Template Activities Table */}
+          {templateRows.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <h2 className="text-lg font-semibold text-white">Template Activities</h2>
                 <span className="text-sm text-white/60">
-                  ({templates.reduce((sum, t) => sum + t.modules.length, 0)} across {templates.filter(t => t.modules.length > 0).length} template{templates.filter(t => t.modules.length > 0).length !== 1 ? 's' : ''})
+                  ({templateRows.length} across {templates.filter(t => t.modules.length > 0).length} template{templates.filter(t => t.modules.length > 0).length !== 1 ? 's' : ''})
                 </span>
               </div>
-              <div className="space-y-6">
-                {templates.filter(t => t.modules.length > 0).map((template) => (
-                  <div key={template.id}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wide">
-                        {template.name}
-                      </h3>
-                      <Link
-                        href={`/admin/templates/${template.id}`}
-                        className="text-xs text-brand-400 hover:text-brand-300"
-                      >
-                        Edit Template
-                      </Link>
-                    </div>
-                    <div className="grid gap-3">
-                      {template.modules.map((mod) => (
-                        <Card key={mod.id} className="hover:shadow-sm transition-shadow">
-                          <div className="p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-sm font-semibold">
-                                {mod.order_index + 1}
-                              </div>
-                              <div>
-                                <h3 className="font-medium text-gray-900">{mod.title}</h3>
-                                {mod.objective && (
-                                  <p className="text-sm text-gray-500 mt-0.5">{mod.objective}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm text-gray-500">
-                                {mod.step_count} step{mod.step_count !== 1 ? 's' : ''}
-                              </span>
-                              <Link
-                                href={`/admin/templates/${template.id}`}
-                                className="text-xs text-gray-400 hover:text-brand-600 font-medium"
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        {tmplColumns.map((col) => (
+                          <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
+                            <button
+                              type="button"
+                              onClick={() => toggleTmplSort(col.key)}
+                              className="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                            >
+                              {col.label}
+                              <TmplSortIcon column={col.key} />
+                            </button>
+                          </th>
+                        ))}
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Objective</th>
+                        <th className="px-4 py-3 font-medium text-gray-600 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {sortedTemplateRows.map((row) => (
+                        <tr key={row.moduleId} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{row.templateName}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">{row.title}</td>
+                          <td className="px-4 py-3 text-gray-700">
+                            <span className="inline-flex items-center gap-1">
+                              <ListChecks className="w-3.5 h-3.5 text-gray-400" />
+                              {row.step_count}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-sm max-w-xs truncate">
+                            {row.objective || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end">
+                              <button
+                                onClick={(e) => openTmplMenu(row.moduleId, e.currentTarget)}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="More actions"
                               >
-                                View
-                              </Link>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </button>
                             </div>
-                          </div>
-                        </Card>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Template dropdown menu */}
+              {tmplMenuId && tmplMenuPos && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setTmplMenuId(null)} />
+                  <div
+                    className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-40"
+                    style={{ top: tmplMenuPos.top, left: tmplMenuPos.left }}
+                  >
+                    <Link
+                      href={`/admin/templates/${templateRows.find(r => r.moduleId === tmplMenuId)?.templateId}`}
+                      onClick={() => setTmplMenuId(null)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      View in Template
+                    </Link>
                   </div>
-                ))}
-              </div>
+                </>
+              )}
             </div>
           )}
         </>

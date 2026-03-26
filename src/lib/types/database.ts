@@ -194,6 +194,7 @@ export interface Session {
   department: string | null;
   location: string | null;
   poc_name: string | null;
+  poc_email: string | null;
   event_type: EventCategory | null;
   event_date: string | null;
   ai_tool_name: string;
@@ -213,6 +214,7 @@ export interface SessionInsert {
   department?: string | null;
   location?: string | null;
   poc_name?: string | null;
+  poc_email?: string | null;
   event_type?: EventCategory | null;
   event_date?: string | null;
   ai_tool_name?: string;
@@ -446,6 +448,26 @@ export interface LibraryActivityPromptBlockInsert {
   content_markdown: string;
   order_index: number;
   is_copyable?: boolean;
+}
+
+// ============================================================================
+// Approved Clients
+// ============================================================================
+
+export interface ApprovedClient {
+  id: string;
+  organization_id: string;
+  name: string;
+  poc_name: string | null;
+  poc_email: string | null;
+  created_at: string;
+}
+
+export interface ApprovedClientInsert {
+  organization_id: string;
+  name: string;
+  poc_name?: string | null;
+  poc_email?: string | null;
 }
 
 export interface LibraryActivityWithSteps extends LibraryActivity {

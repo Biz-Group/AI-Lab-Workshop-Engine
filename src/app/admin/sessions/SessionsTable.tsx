@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { Card, Button, Modal, ConfirmModal, Input } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -17,6 +17,7 @@ interface SessionRow {
   department: string | null;
   location: string | null;
   poc_name: string | null;
+  poc_email: string | null;
   event_type: string | null;
   event_date: string | null;
   template_name: string;
@@ -40,9 +41,10 @@ const STATUS_STYLES: Record<string, string> = {
 
 interface SessionsTableProps {
   sessions: SessionRow[];
+  clients: { id: string; name: string; poc_name: string | null; poc_email: string | null }[];
 }
 
-export function SessionsTable({ sessions: initialSessions }: SessionsTableProps) {
+export function SessionsTable({ sessions: initialSessions, clients }: SessionsTableProps) {
   const router = useRouter();
   const [sessions, setSessions] = useState(initialSessions);
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -73,9 +75,30 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
     department: '',
     location: '',
     poc_name: '',
+    poc_email: '',
     event_type: 'keynote' as string,
     event_date: '',
   });
+
+  // Client dropdown state for edit modal
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const clientRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (clientRef.current && !clientRef.current.contains(e.target as Node)) {
+        setClientDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearch) return clients;
+    return clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()));
+  }, [clients, clientSearch]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -132,9 +155,12 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
       department: s.department || '',
       location: s.location || '',
       poc_name: s.poc_name || '',
+      poc_email: s.poc_email || '',
       event_type: s.event_type || 'keynote',
       event_date: s.event_date ? new Date(s.event_date).toISOString().slice(0, 16) : '',
     });
+    setClientSearch('');
+    setClientDropdownOpen(false);
     setEditSession(s);
     setOpenMenuId(null);
   };
@@ -151,6 +177,7 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
           department: editForm.department,
           location: editForm.location,
           poc_name: editForm.poc_name,
+          poc_email: editForm.poc_email || undefined,
           event_type: editForm.event_type,
           event_date: editForm.event_date ? new Date(editForm.event_date).toISOString() : undefined,
         }),
@@ -253,7 +280,12 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
                       <Copy className="w-3 h-3" />
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{s.poc_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <div>{s.poc_name || '—'}</div>
+                    {s.poc_email && (
+                      <div className="text-xs text-gray-500">{s.poc_email}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1 relative">
                       <Link
@@ -322,12 +354,61 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
         size="lg"
       >
         <div className="p-6 space-y-4">
-          <Input
-            label="Client Name"
-            value={editForm.client_name}
-            onChange={(e) => setEditForm(f => ({ ...f, client_name: e.target.value }))}
-            placeholder="Client or company name"
-          />
+          {/* Client Name — searchable dropdown */}
+          <div ref={clientRef} className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+            <button
+              type="button"
+              onClick={() => { setClientDropdownOpen(!clientDropdownOpen); setClientSearch(''); }}
+              className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 transition-colors"
+            >
+              <span className={editForm.client_name ? 'text-gray-900' : 'text-gray-400'}>
+                {editForm.client_name || 'Select a client...'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {clientDropdownOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-hidden">
+                <div className="p-2 border-b border-gray-100">
+                  <input
+                    type="text"
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    placeholder="Search clients..."
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    autoFocus
+                  />
+                </div>
+                <div className="overflow-y-auto max-h-36">
+                  {filteredClients.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500">No clients found</div>
+                  ) : (
+                    filteredClients.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setEditForm(f => ({
+                            ...f,
+                            client_name: c.name,
+                            poc_name: c.poc_name || f.poc_name,
+                            poc_email: c.poc_email || f.poc_email,
+                          }));
+                          setClientDropdownOpen(false);
+                          setClientSearch('');
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-brand-50 transition-colors ${
+                          editForm.client_name === c.name ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <Input
             label="Department"
             value={editForm.department}
@@ -348,6 +429,13 @@ export function SessionsTable({ sessions: initialSessions }: SessionsTableProps)
               placeholder="POC name"
             />
           </div>
+          <Input
+            type="email"
+            label="POC Email"
+            value={editForm.poc_email}
+            onChange={(e) => setEditForm(f => ({ ...f, poc_email: e.target.value }))}
+            placeholder="poc@company.com"
+          />
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>

@@ -9,6 +9,7 @@ const createSessionSchema = z.object({
   department: z.string().max(200).optional().default(''),
   location: z.string().min(1, 'Location is required').max(200),
   poc_name: z.string().min(1, 'Point of contact is required').max(200),
+  poc_email: z.string().email('Valid email is required').max(200),
   event_type: z.enum(['keynote', 'halfday', 'fullday']),
   event_date: z.string().datetime({ message: 'Valid date/time is required' }),
 });
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
         department: data.department || null,
         location: data.location,
         poc_name: data.poc_name,
+        poc_email: data.poc_email,
         event_type: data.event_type,
         event_date: data.event_date,
         scheduled_at: data.event_date,

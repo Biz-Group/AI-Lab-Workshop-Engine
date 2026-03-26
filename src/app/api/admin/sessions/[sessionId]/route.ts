@@ -12,6 +12,7 @@ const updateSessionSchema = z.object({
   department: z.string().max(200).optional(),
   location: z.string().max(200).optional(),
   poc_name: z.string().max(200).optional(),
+  poc_email: z.string().email().max(200).optional(),
   event_type: z.enum(['keynote', 'halfday', 'fullday']).optional(),
   event_date: z.string().datetime().optional(),
 });

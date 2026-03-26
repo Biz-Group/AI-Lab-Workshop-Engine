@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Rocket } from 'lucide-react';
+import { ArrowLeft, Rocket, ChevronDown } from 'lucide-react';
 import { Button, Input, Card, CardContent } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -14,11 +14,19 @@ interface Template {
   estimated_duration_minutes: number;
 }
 
-interface NewSessionFormProps {
-  templates: Template[];
+interface ClientOption {
+  id: string;
+  name: string;
+  poc_name: string | null;
+  poc_email: string | null;
 }
 
-export function NewSessionForm({ templates }: NewSessionFormProps) {
+interface NewSessionFormProps {
+  templates: Template[];
+  clients: ClientOption[];
+}
+
+export function NewSessionForm({ templates, clients }: NewSessionFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,10 +35,31 @@ export function NewSessionForm({ templates }: NewSessionFormProps) {
     department: '',
     location: '',
     poc_name: '',
+    poc_email: '',
     event_type: 'halfday' as 'keynote' | 'halfday' | 'fullday',
     event_date: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Client dropdown state
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const clientRef = useRef<HTMLDivElement>(null);
+
+  const filteredClients = clients.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase())
+  );
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (clientRef.current && !clientRef.current.contains(e.target as Node)) {
+        setClientDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -38,7 +67,12 @@ export function NewSessionForm({ templates }: NewSessionFormProps) {
     if (!formData.template_id) newErrors.template_id = 'Please select a template';
     if (!formData.client_name.trim()) newErrors.client_name = 'Client name is required';
     if (!formData.location.trim()) newErrors.location = 'Location is required';
-    if (!formData.poc_name.trim()) newErrors.poc_name = 'Point of contact is required';
+    if (!formData.poc_name.trim()) newErrors.poc_name = 'Point of contact name is required';
+    if (!formData.poc_email.trim()) {
+      newErrors.poc_email = 'POC email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.poc_email)) {
+      newErrors.poc_email = 'Please enter a valid email address';
+    }
     if (!formData.event_date) newErrors.event_date = 'Date and time are required';
 
     setErrors(newErrors);
@@ -88,6 +122,25 @@ export function NewSessionForm({ templates }: NewSessionFormProps) {
     }
   };
 
+  const selectClient = (client: ClientOption) => {
+    setFormData(prev => ({
+      ...prev,
+      client_name: client.name,
+      poc_name: client.poc_name || prev.poc_name,
+      poc_email: client.poc_email || prev.poc_email,
+    }));
+    setClientSearch('');
+    setClientDropdownOpen(false);
+    // Clear errors on autofilled fields
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.client_name;
+      if (client.poc_name) delete next.poc_name;
+      if (client.poc_email) delete next.poc_email;
+      return next;
+    });
+  };
+
   return (
     <form onSubmit={handleSubmit}>
       <Card>
@@ -119,17 +172,61 @@ export function NewSessionForm({ templates }: NewSessionFormProps) {
 
           <hr className="border-gray-200" />
 
-          {/* Client Name & Department */}
+          {/* Client Name (searchable dropdown) & Department */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Input
-                label="Client Name"
-                value={formData.client_name}
-                onChange={(e) => updateField('client_name', e.target.value)}
-                placeholder="e.g. Acme Corporation"
-                error={errors.client_name}
-                required
-              />
+            <div ref={clientRef} className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Client Name <span className="text-red-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setClientDropdownOpen(!clientDropdownOpen)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 border rounded-lg bg-white text-left transition-colors ${
+                  errors.client_name ? 'border-red-500' : 'border-gray-300 focus:ring-2 focus:ring-brand-500'
+                }`}
+              >
+                <span className={formData.client_name ? 'text-gray-900' : 'text-gray-400'}>
+                  {formData.client_name || 'Select a client…'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+              </button>
+              {clientDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                  <div className="p-2 border-b border-gray-100">
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      placeholder="Search clients…"
+                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="overflow-y-auto max-h-48">
+                    {filteredClients.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-gray-500 text-center">
+                        {clients.length === 0
+                          ? 'No approved clients. Add them in Organization settings.'
+                          : 'No matching clients found'}
+                      </div>
+                    ) : (
+                      filteredClients.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => selectClient(c)}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-brand-50 transition-colors ${
+                            formData.client_name === c.name ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-700'
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+              {errors.client_name && <p className="text-sm text-red-500 mt-1">{errors.client_name}</p>}
             </div>
             <div>
               <Input
@@ -151,15 +248,26 @@ export function NewSessionForm({ templates }: NewSessionFormProps) {
             required
           />
 
-          {/* POC */}
-          <Input
-            label="Main Point of Contact"
-            value={formData.poc_name}
-            onChange={(e) => updateField('poc_name', e.target.value)}
-            placeholder="e.g. Jane Smith"
-            error={errors.poc_name}
-            required
-          />
+          {/* POC Name & Email */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="POC Name"
+              value={formData.poc_name}
+              onChange={(e) => updateField('poc_name', e.target.value)}
+              placeholder="e.g. Jane Smith"
+              error={errors.poc_name}
+              required
+            />
+            <Input
+              label="POC Email"
+              type="email"
+              value={formData.poc_email}
+              onChange={(e) => updateField('poc_email', e.target.value)}
+              placeholder="e.g. jane@acme.com"
+              error={errors.poc_email}
+              required
+            />
+          </div>
 
           {/* Event Type */}
           <div>

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Pencil, Trash2, Eye, EyeOff, Clock, Layers, ExternalLink } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Pencil, Trash2, Eye, EyeOff, Clock, Layers, MoreHorizontal, FileText } from 'lucide-react';
 import { Card, Button, ConfirmModal } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -18,16 +18,86 @@ interface Template {
   module_count: number;
 }
 
+type SortKey = 'name' | 'module_count' | 'estimated_duration_minutes' | 'is_published' | 'created_at';
+type SortDir = 'asc' | 'desc';
+
 export function TemplatesList({ templates: initialTemplates }: { templates: Template[] }) {
   const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates);
   const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    return [...templates].sort((a, b) => {
+      if (sortKey === 'created_at') {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return sortDir === 'asc' ? aTime - bTime : bTime - aTime;
+      }
+      if (sortKey === 'module_count' || sortKey === 'estimated_duration_minutes') {
+        const aVal = a[sortKey];
+        const bVal = b[sortKey];
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      if (sortKey === 'is_published') {
+        const aVal = a.is_published ? 1 : 0;
+        const bVal = b.is_published ? 1 : 0;
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      const aVal = String(a[sortKey]).toLowerCase();
+      const bVal = String(b[sortKey]).toLowerCase();
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [templates, sortKey, sortDir]);
+
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortKey !== column) return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="w-3.5 h-3.5 text-brand-600" />
+      : <ArrowDown className="w-3.5 h-3.5 text-brand-600" />;
+  };
+
+  const columns: { key: SortKey; label: string }[] = [
+    { key: 'name', label: 'Name' },
+    { key: 'module_count', label: 'Activities' },
+    { key: 'estimated_duration_minutes', label: 'Duration' },
+    { key: 'is_published', label: 'Status' },
+    { key: 'created_at', label: 'Created' },
+  ];
+
+  const openMenu = useCallback((id: string, btnEl: HTMLButtonElement) => {
+    if (openMenuId === id) {
+      setOpenMenuId(null);
+      return;
+    }
+    const rect = btnEl.getBoundingClientRect();
+    const menuHeight = 120;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < menuHeight ? rect.top - menuHeight : rect.bottom + 4;
+    setMenuPos({ top, left: rect.right - 160 });
+    setOpenMenuId(id);
+  }, [openMenuId]);
 
   const handleTogglePublish = async (template: Template) => {
     if (togglingId) return;
     setTogglingId(template.id);
+    setOpenMenuId(null);
     try {
       const response = await fetch(`/api/admin/templates/${template.id}`, {
         method: 'PATCH',
@@ -69,73 +139,132 @@ export function TemplatesList({ templates: initialTemplates }: { templates: Temp
     }
   };
 
+  if (templates.length === 0) {
+    return (
+      <Card>
+        <div className="p-8 text-center">
+          <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+          <h3 className="text-base font-semibold text-gray-900 mb-2">No Templates Yet</h3>
+          <p className="text-sm text-gray-600 mb-4">Create your first workshop template to get started.</p>
+          <Link href="/admin/templates/new">
+            <Button>Create Template</Button>
+          </Link>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <>
-      <div className="grid gap-4">
-        {templates.map((template) => (
-          <Card key={template.id} className="hover:shadow-md transition-shadow">
-            <div className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Link
-                      href={`/admin/templates/${template.id}`}
-                      className="text-lg font-semibold text-gray-900 hover:text-brand-600 transition-colors"
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                {columns.map((col) => (
+                  <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(col.key)}
+                      className="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
                     >
-                      {template.name}
-                    </Link>
+                      {col.label}
+                      <SortIcon column={col.key} />
+                    </button>
+                  </th>
+                ))}
+                <th className="px-4 py-3 font-medium text-gray-600 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {sorted.map((template) => (
+                <tr key={template.id} className="hover:bg-gray-50/60 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900">{template.name}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <span className="inline-flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5 text-gray-400" />
+                      {template.module_count}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" />
+                      {template.estimated_duration_minutes} min
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
                       template.is_published
                         ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
+                        : 'bg-yellow-100 text-yellow-700'
                     }`}>
                       {template.is_published ? 'Published' : 'Draft'}
                     </span>
-                  </div>
-                  {template.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{template.description}</p>
-                  )}
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span className="inline-flex items-center gap-1">
-                      <Layers className="w-3.5 h-3.5" />
-                      {template.module_count} module{template.module_count !== 1 ? 's' : ''}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {template.estimated_duration_minutes} min
-                    </span>
-                    <span>Created {formatDateTime(template.created_at)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <button
-                    onClick={() => handleTogglePublish(template)}
-                    disabled={togglingId === template.id}
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                    title={template.is_published ? 'Unpublish' : 'Publish'}
-                  >
-                    {template.is_published ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                  <Link
-                    href={`/admin/templates/${template.id}`}
-                    className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                    title="Edit template"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Link>
-                  <button
-                    onClick={() => setDeleteTemplate(template)}
-                    className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete template"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {formatDateTime(template.created_at)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={(e) => openMenu(template.id, e.currentTarget)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        title="More actions"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Floating dropdown menu */}
+      {openMenuId && menuPos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+          <div
+            className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-40"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            <Link
+              href={`/admin/templates/${openMenuId}`}
+              onClick={() => setOpenMenuId(null)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </Link>
+            <button
+              onClick={() => {
+                const t = templates.find(x => x.id === openMenuId);
+                if (t) handleTogglePublish(t);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {templates.find(x => x.id === openMenuId)?.is_published
+                ? <><EyeOff className="w-3.5 h-3.5" /> Unpublish</>
+                : <><Eye className="w-3.5 h-3.5" /> Publish</>
+              }
+            </button>
+            <button
+              onClick={() => {
+                const t = templates.find(x => x.id === openMenuId);
+                if (t) { setDeleteTemplate(t); setOpenMenuId(null); }
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
 
       <ConfirmModal
         isOpen={!!deleteTemplate}
