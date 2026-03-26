@@ -164,4 +164,16 @@ describe('WorkshopRunner soft gating', () => {
     });
     expect(screen.queryByText('Skip this step for now?')).toBeNull();
   });
+
+  it('renders the facilitator presence badge while presence is still syncing', async () => {
+    const { container } = render(<WorkshopRunner {...createProps()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Checking facilitator')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+    expect(container.querySelector('svg')).toBeTruthy();
+  });
 });

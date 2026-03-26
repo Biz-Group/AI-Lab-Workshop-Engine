@@ -22,7 +22,11 @@ import {
   Send,
   Trash2,
   ChevronDown as ChevDown,
+  Minus,
+  Plus,
   ImageIcon,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Button, Timer, Card, CardContent, ProgressBar } from '@/components/ui';
 import { ParticipantList } from './ParticipantList';
@@ -83,6 +87,7 @@ export function PresenterView({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [showAnswered, setShowAnswered] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
 
   // Flatten steps (memoized)
   const allSteps = useMemo(() => modules.flatMap((module, moduleIndex) =>
@@ -100,7 +105,7 @@ export function PresenterView({
   const isFirstStep = currentStepIndex <= 0;
   const isLastStep = currentStepIndex >= allSteps.length - 1;
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates + track facilitator presence
   useEffect(() => {
     const supabase = createClient();
 
@@ -161,8 +166,23 @@ export function PresenterView({
       )
       .subscribe();
 
+    const presenceChannel = supabase.channel(`presence:${initialSession.id}`);
+    let mounted = true;
+
+    presenceChannel.subscribe(async (status) => {
+      if (!mounted) return;
+      if (status === 'SUBSCRIBED') {
+        setBroadcastStatus('connected');
+        await presenceChannel.track({ role: 'facilitator' });
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setBroadcastStatus('error');
+      }
+    });
+
     return () => {
+      mounted = false;
       supabase.removeChannel(presenterChannel);
+      supabase.removeChannel(presenceChannel);
     };
   }, [initialSession.id]);
 
@@ -323,7 +343,7 @@ export function PresenterView({
     ? Math.round((completedCount / participantCount) * 100) 
     : 0;
 
-  const [customTimerMinutes, setCustomTimerMinutes] = useState('');
+  const [selectedTimerMinutes, setSelectedTimerMinutes] = useState(5);
 
   const copyJoinCode = () => {
     navigator.clipboard.writeText(session.joinCode);
@@ -397,12 +417,33 @@ export function PresenterView({
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className={`px-3 py-1 rounded-full text-sm ${
+          <span className={`px-3 py-1 rounded-full text-sm inline-flex items-center gap-1.5 ${
             session.status === 'live' 
               ? 'bg-green-500/20 text-green-400'
-              : 'bg-yellow-500/20 text-yellow-400'
+              : session.status === 'ended'
+                ? 'bg-red-500/20 text-red-400'
+                : 'bg-yellow-500/20 text-yellow-400'
           }`}>
-            {session.status.toUpperCase()}
+            <span className={`w-2 h-2 rounded-full ${
+              session.status === 'live' ? 'bg-green-400 animate-pulse' : session.status === 'ended' ? 'bg-red-400' : 'bg-yellow-400'
+            }`} />
+            {session.status === 'live' ? 'Active' : session.status === 'ended' ? 'Ended' : 'Inactive'}
+          </span>
+          <span className={`px-3 py-1 rounded-full text-sm inline-flex items-center gap-1.5 ${
+            broadcastStatus === 'connected'
+              ? 'bg-green-500/20 text-green-400'
+              : broadcastStatus === 'error'
+                ? 'bg-red-500/20 text-red-400'
+                : 'bg-yellow-500/20 text-yellow-400'
+          }`}>
+            {broadcastStatus === 'connected' ? (
+              <Wifi className="w-3.5 h-3.5" />
+            ) : broadcastStatus === 'error' ? (
+              <WifiOff className="w-3.5 h-3.5" />
+            ) : (
+              <Wifi className="w-3.5 h-3.5 animate-pulse" />
+            )}
+            {broadcastStatus === 'connected' ? 'Broadcasting' : broadcastStatus === 'error' ? 'Disconnected' : 'Connecting'}
           </span>
           {session.status === 'live' && (
             <Button variant="danger" size="sm" onClick={endSession}>
@@ -428,9 +469,9 @@ export function PresenterView({
         {/* Center-Left Panel - Join Code & Stats */}
         <div className="w-72 flex-shrink-0 bg-gray-800 p-6 flex flex-col border-r border-gray-700">
           {/* Join Code */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 px-2">
             <p className="text-gray-400 text-sm mb-2">JOIN CODE</p>
-            <div className="presenter-join-code text-6xl font-bold text-brand-400 tracking-wider">
+            <div className="presenter-join-code -ml-2 text-5xl text-brand-400">
               {formatJoinCodeForDisplay(session.joinCode)}
             </div>
             <p className="text-gray-500 text-sm mt-2">
@@ -488,41 +529,33 @@ export function PresenterView({
                 </Button>
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  {[3, 5, 10].map((min) => (
-                    <Button
-                      key={min}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => startTimer(min)}
-                    >
-                      {min}m
-                    </Button>
-                  ))}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTimerMinutes((prev) => Math.max(1, prev - 1))}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-white transition-colors"
+                  aria-label="Decrease timer minutes"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <div className="flex-1 text-center text-2xl font-bold text-white tabular-nums">
+                  {selectedTimerMinutes}m
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    placeholder="Custom"
-                    value={customTimerMinutes}
-                    onChange={(e) => setCustomTimerMinutes(e.target.value)}
-                    className="flex-1 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!customTimerMinutes || parseInt(customTimerMinutes) < 1}
-                    onClick={() => {
-                      startTimer(parseInt(customTimerMinutes));
-                      setCustomTimerMinutes('');
-                    }}
-                  >
-                    Start
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTimerMinutes((prev) => Math.min(120, prev + 1))}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-white transition-colors"
+                  aria-label="Increase timer minutes"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => startTimer(selectedTimerMinutes)}
+                >
+                  Start
+                </Button>
               </div>
             )}
           </div>

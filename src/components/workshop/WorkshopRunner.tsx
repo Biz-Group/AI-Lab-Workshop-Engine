@@ -546,7 +546,7 @@ export function WorkshopRunner({
                 {deliverablePreview ? ` • Deliverable: ${deliverablePreview}` : ''}
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-end gap-3 flex-wrap">
               {session.timerEndAt && (
                 <Timer endAt={session.timerEndAt} size="md" />
               )}
