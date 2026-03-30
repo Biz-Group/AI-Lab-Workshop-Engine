@@ -5,5 +5,6 @@ export { CopyButton, PromptBlock } from './CopyButton';
 export { ProgressIndicator, ProgressBar } from './Progress';
 export { Timer, Countdown } from './Timer';
 export { Modal, ConfirmModal } from './Modal';
+export { QrCodeModal } from './QrCodeModal';
 export { Checkbox } from './Checkbox';
 export { LoadingSpinner, LoadingOverlay, LoadingCard, EmptyState } from './Loading';

@@ -3,8 +3,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal, ChevronDown } from 'lucide-react';
-import { Card, Button, Modal, ConfirmModal, Input } from '@/components/ui';
+import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal, ChevronDown, QrCode } from 'lucide-react';
+import { Card, Button, Modal, ConfirmModal, Input, QrCodeModal } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -55,6 +55,7 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
   const [isSaving, setIsSaving] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
   const openMenu = useCallback((id: string, btnEl: HTMLButtonElement) => {
     if (openMenuId === id) {
@@ -271,14 +272,23 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
                     {formatDateTime(s.created_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleCopyCode(s.join_code)}
-                      className="inline-flex items-center gap-1 font-mono font-semibold text-brand-600 hover:text-brand-700 transition-colors"
-                      title="Copy join code"
-                    >
-                      {s.join_code}
-                      <Copy className="w-3 h-3" />
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopyCode(s.join_code)}
+                        className="inline-flex items-center gap-1 font-mono font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+                        title="Copy join code"
+                      >
+                        {s.join_code}
+                        <Copy className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => setQrCode(s.join_code)}
+                        className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors"
+                        title="Show QR code"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     <div>{s.poc_name || '—'}</div>
@@ -469,6 +479,14 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
           </div>
         </div>
       </Modal>
+
+      {/* QR Code Modal */}
+      <QrCodeModal
+        isOpen={!!qrCode}
+        onClose={() => setQrCode(null)}
+        joinCode={qrCode || ''}
+        joinUrl={qrCode ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${qrCode}` : ''}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmModal

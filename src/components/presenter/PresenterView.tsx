@@ -28,7 +28,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { Button, Timer, Card, CardContent, ProgressBar } from '@/components/ui';
+import { Button, Timer, Card, CardContent, ProgressBar, QrCodeModal } from '@/components/ui';
 import { ParticipantList } from './ParticipantList';
 import { createClient } from '@/lib/supabase';
 import { formatJoinCodeForDisplay, cn } from '@/lib/utils';
@@ -74,6 +74,7 @@ export function PresenterView({
   const [stuckCount, setStuckCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   // Q&A state
   interface Question {
@@ -477,6 +478,13 @@ export function PresenterView({
             <p className="text-gray-500 text-sm mt-2">
               go to <span className="text-brand-400">/join</span>
             </p>
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <QrCode className="w-4 h-4" />
+              Show QR Code
+            </button>
           </div>
 
           {/* Stats */}
@@ -672,6 +680,15 @@ export function PresenterView({
               variant="secondary"
               size="sm"
               className="w-full justify-start"
+              onClick={() => setShowQrModal(true)}
+            >
+              <QrCode className="w-4 h-4 mr-2" />
+              Show QR Code
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full justify-start"
               onClick={() => {
                 window.open(`/s/${session.id}`, '_blank');
               }}
@@ -820,6 +837,14 @@ export function PresenterView({
           </div>
         </div>
       </main>
+
+      {/* QR Code Modal */}
+      <QrCodeModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        joinCode={formatJoinCodeForDisplay(session.joinCode)}
+        joinUrl={typeof window !== 'undefined' ? `${window.location.origin}/join/${session.joinCode}` : ''}
+      />
     </div>
   );
 }
