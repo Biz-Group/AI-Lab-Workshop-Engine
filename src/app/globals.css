@@ -120,7 +120,7 @@ input, select, textarea {
 
 /* Copy button animation */
 .copy-success {
-  animation: copyPulse 0.3s ease-out;
+  animation: copyPulse 0.4s ease-out;
 }
 
 @keyframes copyPulse {
@@ -408,7 +408,45 @@ input, select, textarea {
   }
 }
 
+/* Q&A panel slide-in */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 /* Participant list hover state */
 .hover\:bg-gray-750:hover {
   background-color: rgba(55, 65, 81, 0.7);
+}
+
+/* ============================================================================
+   Reduced Motion — disable decorative animations for accessibility
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .confetti-particle,
+  .celebration-icon-pop,
+  .celebration-star-pop,
+  .copy-success {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .quest-complete-banner {
+    animation: none !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  /* Step transition */
+  .step-transition-enter {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

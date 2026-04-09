@@ -34,15 +34,8 @@ interface NarrativeProgressMapProps {
   className?: string;
 }
 
-// Quest-themed labels for modules
+// Icons for chapter markers
 const CHAPTER_ICONS = [MapPin, Star, Flag, Sparkles, Trophy];
-const CHAPTER_THEMES = [
-  { label: 'The Beginning', color: 'from-emerald-400 to-emerald-600' },
-  { label: 'Rising Action', color: 'from-blue-400 to-blue-600' },
-  { label: 'The Challenge', color: 'from-purple-400 to-purple-600' },
-  { label: 'Mastery', color: 'from-amber-400 to-amber-600' },
-  { label: 'The Summit', color: 'from-rose-400 to-rose-600' },
-];
 
 export function NarrativeProgressMap({
   steps,
@@ -102,41 +95,29 @@ export function NarrativeProgressMap({
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Quest Header */}
+      {/* Progress Header */}
       <div className="mb-5">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center">
-            <Swords className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Your Quest</h3>
-          </div>
-        </div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Progress</h3>
 
         {/* Overall Progress Bar */}
         <div className="relative">
           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-            <span>{totalCompleted} of {steps.length} tasks</span>
+            <span>{totalCompleted} of {steps.length} moments captured</span>
             <span>{Math.round(overallProgress)}%</span>
           </div>
-          <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-700 ease-out relative"
+              className="h-full bg-brand-500 rounded-full transition-all duration-700 ease-out"
               style={{ width: `${overallProgress}%` }}
-            >
-              {overallProgress > 5 && (
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full border-2 border-brand-500 shadow-sm" />
-              )}
-            </div>
+            />
           </div>
         </div>
       </div>
 
       {/* Chapter List */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 -mr-1">
+      <div className="flex-1 overflow-y-auto space-y-3 pt-1 px-1 -mx-1">
         {modules.map((module, moduleIndex) => {
           const progress = getModuleProgress(moduleIndex);
-          const theme = CHAPTER_THEMES[moduleIndex % CHAPTER_THEMES.length];
           const ChapterIcon = CHAPTER_ICONS[moduleIndex % CHAPTER_ICONS.length];
           const isExpanded = expandedModules.has(moduleIndex);
           const moduleSteps = steps.filter(s => s.moduleIndex === moduleIndex);
@@ -172,9 +153,9 @@ export function NarrativeProgressMap({
                   <div className={cn(
                     'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all',
                     progress.isComplete
-                      ? 'bg-gradient-to-br ' + theme.color + ' text-white shadow-md chapter-complete-glow'
+                      ? 'bg-brand-500 text-white'
                       : isCurrentModule
-                        ? 'bg-gradient-to-br ' + theme.color + ' text-white animate-pulse-slow'
+                        ? 'bg-brand-100 text-brand-600 ring-2 ring-brand-300'
                         : progress.hasIncomplete
                           ? 'bg-amber-100 text-amber-700'
                         : 'bg-gray-100 text-gray-400'
@@ -190,34 +171,12 @@ export function NarrativeProgressMap({
 
                   {/* Chapter Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        {isFinalModule ? 'Final Challenge' : `Chapter ${moduleIndex + 1}`}
-                      </span>
-                      {progress.isComplete && (
-                        <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
-                          COMPLETE
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      {isFinalModule ? 'Final Challenge' : `Chapter ${moduleIndex + 1}`}
+                    </span>
                     <p className="text-sm font-semibold text-gray-900 truncate">
                       {module.title}
                     </p>
-                    {/* Mini progress */}
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {moduleSteps.map((step) => (
-                        <div
-                          key={step.id}
-                          className={cn(
-                            'h-1 rounded-full flex-1 transition-all duration-500',
-                            step.status === 'completed' ? 'bg-brand-500' :
-                            step.status === 'current' ? 'bg-brand-300 animate-pulse' :
-                            step.status === 'incomplete' ? 'bg-amber-300' :
-                            'bg-gray-200'
-                          )}
-                        />
-                      ))}
-                    </div>
                   </div>
 
                   {/* Expand Toggle */}
@@ -240,7 +199,15 @@ export function NarrativeProgressMap({
                   {moduleSteps.map((step, stepIdx) => (
                     <div
                       key={step.id}
+                      role={isClickable ? 'button' : undefined}
+                      tabIndex={isClickable ? 0 : undefined}
                       onClick={() => handleStepClick(step.id)}
+                      onKeyDown={isClickable ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleStepClick(step.id);
+                        }
+                      } : undefined}
                       className={cn(
                         'flex items-center gap-3 py-2 px-3 rounded-lg transition-all duration-200',
                         isClickable && 'cursor-pointer',
@@ -299,7 +266,7 @@ export function NarrativeProgressMap({
                         <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse flex-shrink-0" />
                       )}
                       {step.status === 'incomplete' && (
-                        <span className="incomplete-step-badge flex-shrink-0">Skipped</span>
+                        <span className="incomplete-step-badge flex-shrink-0">Come back later</span>
                       )}
                       {step.isLastStep && step.status === 'upcoming' && (
                         <Trophy className="w-3 h-3 text-amber-400 flex-shrink-0" />
@@ -313,16 +280,6 @@ export function NarrativeProgressMap({
         })}
       </div>
 
-      {/* Quest Footer */}
-      {overallProgress === 100 && (
-        <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-amber-100 border border-amber-200 text-center quest-complete-banner">
-          <div className="flex items-center justify-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-500" />
-            <span className="text-sm font-bold text-amber-800">Quest Complete!</span>
-            <Trophy className="w-5 h-5 text-amber-500" />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

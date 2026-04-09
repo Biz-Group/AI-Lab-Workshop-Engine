@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateParticipantSession } from '@/lib/utils/session-token';
 import { WorkshopRunner } from '@/components/workshop/WorkshopRunner';
+import { WaitingForSession } from '@/components/workshop/WaitingForSession';
 import { getJoinObject } from '@/lib/utils/supabase-join';
 
 interface PageProps {
@@ -44,6 +45,19 @@ export default async function SessionPage({ params }: PageProps) {
   // Check session status
   if (session.status === 'ended') {
     redirect(`/s/${sessionId}/end`);
+  }
+
+  if (session.status === 'published') {
+    return (
+      <WaitingForSession
+        sessionId={sessionId}
+        participantId={participant.participant_id}
+        participantName={participant.display_name}
+        organizationName={getJoinObject<{ id: string; name: string; logo_url: string | null }>(session.organization)?.name || 'Workshop'}
+        workshopTitle={getJoinObject<{ name: string; description: string | null }>(session.template)?.name || 'Workshop session'}
+        workshopDescription={getJoinObject<{ name: string; description: string | null }>(session.template)?.description || null}
+      />
+    );
   }
 
   if (session.status === 'draft') {

@@ -112,19 +112,19 @@ describe('WorkshopRunner soft gating', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Next Step' }));
 
-    expect(await screen.findByText('Skip this step for now?')).toBeTruthy();
+    expect(await screen.findByText('Move on and come back later?')).toBeTruthy();
   });
 
   it('keeps user on current step when choosing stay and complete', async () => {
     render(<WorkshopRunner {...createProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next Step' }));
-    expect(await screen.findByText('Skip this step for now?')).toBeTruthy();
+    expect(await screen.findByText('Move on and come back later?')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stay and complete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stay with this step' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Skip this step for now?')).toBeNull();
+      expect(screen.queryByText('Move on and come back later?')).toBeNull();
     });
     expect(screen.getByRole('heading', { name: 'First Step' })).toBeTruthy();
   });
@@ -133,14 +133,14 @@ describe('WorkshopRunner soft gating', () => {
     render(<WorkshopRunner {...createProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next Step' }));
-    expect(await screen.findByText('Skip this step for now?')).toBeTruthy();
+    expect(await screen.findByText('Move on and come back later?')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue and return later' }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Second Step' })).toBeTruthy();
     });
-    expect(screen.getByText('Skipped')).toBeTruthy();
+    expect(screen.getByText('Come back later')).toBeTruthy();
   });
 
   it('does not warn when current step already has a submission', async () => {
@@ -162,18 +162,14 @@ describe('WorkshopRunner soft gating', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Second Step' })).toBeTruthy();
     });
-    expect(screen.queryByText('Skip this step for now?')).toBeNull();
+    expect(screen.queryByText('Move on and come back later?')).toBeNull();
   });
 
-  it('renders the facilitator presence badge while presence is still syncing', async () => {
-    const { container } = render(<WorkshopRunner {...createProps()} />);
+  it('renders the richer narrative step sections and wayfinding copy', async () => {
+    render(<WorkshopRunner {...createProps()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Checking facilitator')).toBeTruthy();
-    });
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalled();
-    });
-    expect(container.querySelector('svg')).toBeTruthy();
+    expect(screen.getByText('You are here')).toBeTruthy();
+    expect(screen.getByText('What To Do')).toBeTruthy();
+    expect(screen.getByText('What this unlocks')).toBeTruthy();
   });
 });

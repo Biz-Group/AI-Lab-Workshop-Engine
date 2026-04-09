@@ -56,15 +56,25 @@ export function Timer({ endAt, className, onExpire, size = 'md' }: TimerProps) {
   };
 
   const isLowTime = time.hours === 0 && time.minutes === 0 && time.seconds <= 30;
+  const isWarningTime = time.hours === 0 && time.minutes <= 1 && !isLowTime;
+  const isCriticalTime = time.hours === 0 && time.minutes === 0 && time.seconds <= 15;
 
   return (
     <div
       className={cn(
         'font-mono font-bold tabular-nums',
         sizes[size],
-        isLowTime ? 'text-red-600 animate-pulse' : 'text-gray-700',
+        isCriticalTime
+          ? 'text-red-600 animate-[pulse_2s_ease-in-out_infinite]'
+          : isLowTime
+            ? 'text-amber-600'
+            : isWarningTime
+              ? 'text-amber-600'
+              : 'text-gray-700',
         className
       )}
+      aria-live={isLowTime ? 'assertive' : 'polite'}
+      role="timer"
     >
       {time.hours > 0 && `${String(time.hours).padStart(2, '0')}:`}
       {String(time.minutes).padStart(2, '0')}:{String(time.seconds).padStart(2, '0')}

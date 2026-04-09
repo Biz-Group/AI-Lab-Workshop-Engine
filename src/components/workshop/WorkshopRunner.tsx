@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { 
@@ -9,17 +9,13 @@ import {
   ExternalLink, 
   AlertCircle,
   CheckCircle,
-  Trophy,
   MessageCircle,
   Send,
   X,
   ImagePlus,
   Trash2,
-  BookOpen,
-  ListChecks,
-  ClipboardCheck,
-  Lightbulb,
   Clock3,
+  LayoutList,
 } from 'lucide-react';
 import { 
   Button, 
@@ -30,9 +26,10 @@ import {
   TextArea 
 } from '@/components/ui';
 import { NarrativeProgressMap } from './NarrativeProgressMap';
+import { StepNarrativeSections } from './StepNarrativeSections';
 import { ChapterCelebration, useChapterCelebration } from './ChapterCelebration';
 import { createClient } from '@/lib/supabase';
-import { parseChecklistItems, parseStepInstructions } from '@/lib/utils';
+import { parseStepInstructions } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 interface Module {
@@ -141,6 +138,12 @@ export function WorkshopRunner({
   const [visitedStepIds, setVisitedStepIds] = useState<Set<string>>(new Set());
   const [pendingStepIndex, setPendingStepIndex] = useState<number | null>(null);
   const [isSkipWarningOpen, setIsSkipWarningOpen] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isStepTransitioning, setIsStepTransitioning] = useState(false);
+  const [isMobileProgressOpen, setIsMobileProgressOpen] = useState(false);
+  const [recentSubmissionStepId, setRecentSubmissionStepId] = useState<string | null>(null);
+  const qaFirstFocusRef = useRef<HTMLInputElement>(null);
+  const prevStepIndexRef = useRef(0);
 
   // Flatten steps for navigation (memoized — only recalculates when modules change)
   const allSteps = useMemo(() => modules.flatMap((module, moduleIndex) => 
@@ -159,8 +162,9 @@ export function WorkshopRunner({
   const hasEffectiveImage = !!imageFile || (!!existingSubmission?.image_url && !imageMarkedForRemoval);
   const canSubmit = submissionContent.trim().length > 0 || hasEffectiveImage;
   const parsedInstructions = useMemo(() => parseStepInstructions(currentStep?.instruction_markdown || ''), [currentStep?.instruction_markdown]);
-  const checklistItems = useMemo(() => parseChecklistItems(parsedInstructions.checklist), [parsedInstructions.checklist]);
   const deliverablePreview = useMemo(() => getDeliverablePreview(parsedInstructions.deliverable), [parsedInstructions.deliverable]);
+  const nextStepTitle = allSteps[currentStepIndex + 1]?.title ?? null;
+  const nextUpCopy = parsedInstructions.nextUp || (nextStepTitle ? `Next, you will move into ${nextStepTitle}.` : 'After this, you can wrap up the workshop and collect your prompt pack.');
 
   // No longer sync with facilitator's current step - allow free navigation
   // useEffect removed to prevent navigation reset
@@ -263,6 +267,7 @@ export function WorkshopRunner({
       if (!data.success) throw new Error(data.error);
       setQuestionText('');
       toast.success('Question submitted!');
+      void logEvent('question_asked', { step_id: currentStep?.id });
       fetchQuestions();
     } catch {
       toast.error('Failed to submit question');
@@ -289,12 +294,46 @@ export function WorkshopRunner({
     }
   }, [participant.id, initialSession.id]);
 
-  // Navigate to step
+  useEffect(() => {
+    if (!currentStep?.id) return;
+    void logEvent('step_started', {
+      step_id: currentStep.id,
+      step_title: currentStep.title,
+      module_title: currentStep.moduleTitle,
+    });
+  }, [currentStep?.id, currentStep?.moduleTitle, currentStep?.title, logEvent]);
+
+  // Navigate to step with transition
   const goToStep = useCallback((index: number) => {
     if (index < 0 || index >= allSteps.length) return;
-    setCurrentStepIndex(index);
-    logEvent('step_viewed', { step_id: allSteps[index]?.id });
+    setIsStepTransitioning(true);
+    setRecentSubmissionStepId(null);
+    setTimeout(() => {
+      prevStepIndexRef.current = index;
+      setCurrentStepIndex(index);
+      logEvent('step_viewed', { step_id: allSteps[index]?.id });
+      setIsStepTransitioning(false);
+    }, 150);
   }, [allSteps, logEvent]);
+
+  // Escape key handler for modals
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (isQAOpen) setIsQAOpen(false);
+      else if (isSkipWarningOpen) closeSkipWarning();
+      else if (isMobileProgressOpen) setIsMobileProgressOpen(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isQAOpen, isSkipWarningOpen, isMobileProgressOpen]);
+
+  // Focus Q&A input when panel opens
+  useEffect(() => {
+    if (isQAOpen) {
+      setTimeout(() => qaFirstFocusRef.current?.focus(), 100);
+    }
+  }, [isQAOpen]);
 
   const closeSkipWarning = () => {
     setIsSkipWarningOpen(false);
@@ -416,6 +455,7 @@ export function WorkshopRunner({
         updated_at: data.submission.updated_at || new Date().toISOString(),
       };
       setSubmissions(prev => [...prev.filter(s => s.step_id !== currentStep.id), normalizedSubmission]);
+      setRecentSubmissionStepId(currentStep.id);
       setImageFile(null);
       setImagePreview(null);
       setImageMarkedForRemoval(false);
@@ -474,7 +514,7 @@ export function WorkshopRunner({
   // Chapter celebration hook
   const { celebration, dismissCelebration } = useChapterCelebration(
     narrativeSteps,
-    modules.map(m => ({ title: m.title }))
+    modules.map(m => ({ title: m.title, objective: m.objective }))
   );
 
   if (!currentStep) {
@@ -489,6 +529,7 @@ export function WorkshopRunner({
           chapterTitle={celebration.chapterTitle}
           chapterNumber={celebration.chapterNumber}
           totalChapters={celebration.totalChapters}
+          chapterObjective={celebration.chapterObjective}
           isFinalChapter={celebration.isFinalChapter}
           onDismiss={dismissCelebration}
         />
@@ -525,122 +566,102 @@ export function WorkshopRunner({
       <main className="flex-1 flex flex-col">
         {/* Header */}
         <header className="glass-strong border-b border-white/20 px-6 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-gray-900">{currentStep.title}</h1>
-                {isLastStep && (
-                  <span className="text-xs font-bold bg-gradient-to-r from-amber-100 to-amber-200 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Trophy className="w-3 h-3" />
-                    Final Challenge
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-gray-500">
-                Chapter {currentStep.moduleIndex + 1}: {currentStep.moduleTitle}
+              {/* Mobile-only session context (sidebar hidden on mobile) */}
+              <p className="text-xs text-gray-400 lg:hidden mb-1">
+                {session.organization.name} — {session.template.name}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {currentStep.estimated_minutes
-                  ? `Timebox: about ${currentStep.estimated_minutes} min`
-                  : 'Timebox: work at your own pace'}
-                {deliverablePreview ? ` • Deliverable: ${deliverablePreview}` : ''}
+              <h1 className="text-2xl font-semibold text-gray-900">{currentStep.title}</h1>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Chapter {currentStep.moduleIndex + 1}: {currentStep.moduleTitle}
               </p>
             </div>
             <div className="flex items-center justify-end gap-3 flex-wrap">
-              {session.timerEndAt && (
+              {session.timerEndAt ? (
                 <Timer endAt={session.timerEndAt} size="md" />
-              )}
-              {currentStep.estimated_minutes ? (
-                <span className="text-sm text-gray-500 inline-flex items-center gap-1">
+              ) : currentStep.estimated_minutes ? (
+                <span className="text-xs text-gray-400 inline-flex items-center gap-1">
                   <Clock3 className="w-3.5 h-3.5" />
                   ~{currentStep.estimated_minutes} min
                 </span>
               ) : null}
-              <span className="text-sm text-gray-500">
+              <span className="text-xs text-gray-400">
                 Step {currentStepIndex + 1} of {allSteps.length}
               </span>
             </div>
           </div>
+          <div className="mt-4 rounded-2xl border border-white/40 bg-white/70 px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">You are here</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {parsedInstructions.objective || currentStep.moduleTitle}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  {parsedInstructions.deliverable || 'Work through this step, capture your best response, and keep moving through the session.'}
+                </p>
+              </div>
+              <div className="md:max-w-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">What this unlocks</p>
+                <p className="text-sm text-gray-700">{nextUpCopy}</p>
+              </div>
+            </div>
+          </div>
         </header>
+
+        {/* Mobile progress button (tap to expand) */}
+        <div className="lg:hidden px-4 py-2">
+          <button
+            onClick={() => setIsMobileProgressOpen(true)}
+            className="w-full flex items-center gap-3 rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            aria-label={`Progress: ${narrativeSteps.filter(s => s.status === 'completed').length} of ${narrativeSteps.length} tasks complete. Tap to view details.`}
+          >
+            <LayoutList className="w-4 h-4 text-brand-600 shrink-0" />
+            <span>Progress</span>
+            <span className="ml-auto text-xs tabular-nums text-gray-500">
+              {narrativeSteps.filter(s => s.status === 'completed').length}/{narrativeSteps.length}
+            </span>
+            <div className="w-16 h-1.5 rounded-full bg-gray-300 overflow-hidden">
+              <div
+                className="h-full bg-brand-500 transition-all duration-700 ease-out rounded-full"
+                style={{ width: `${narrativeSteps.length > 0 ? (narrativeSteps.filter(s => s.status === 'completed').length / narrativeSteps.length) * 100 : 0}%` }}
+              />
+            </div>
+          </button>
+        </div>
+
+        {/* Mobile progress bottom sheet */}
+        {isMobileProgressOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setIsMobileProgressOpen(false)} />
+            <div className="relative bg-white rounded-t-2xl max-h-[70vh] overflow-y-auto p-5 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-gray-900">Progress</h2>
+                <button onClick={() => setIsMobileProgressOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <NarrativeProgressMap
+                steps={narrativeSteps}
+                modules={modules.map(m => ({ title: m.title, objective: m.objective }))}
+                onStepClick={(stepId) => {
+                  const index = allSteps.findIndex(s => s.id === stepId);
+                  if (index !== -1) {
+                    setIsMobileProgressOpen(false);
+                    attemptStepNavigation(index);
+                  }
+                }}
+                isClickable={true}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto space-y-6">
-            {/* Structured Instructions */}
-            {parsedInstructions.objective && (
-              <Card className="instruction-section-card border-l-4 border-l-brand-500">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen className="w-4 h-4 text-brand-700" />
-                    <h3 className="instruction-section-heading text-brand-700">Quest Objective</h3>
-                  </div>
-                  <div className="markdown-content text-gray-900 whitespace-pre-wrap">
-                    {parsedInstructions.objective}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {parsedInstructions.actions && (
-              <Card className="instruction-section-card">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ListChecks className="w-4 h-4 text-gray-700" />
-                    <h3 className="instruction-section-heading">Your Actions</h3>
-                  </div>
-                  <div className="markdown-content text-gray-900 whitespace-pre-wrap">
-                    {parsedInstructions.actions}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {parsedInstructions.deliverable && (
-              <Card className="instruction-section-card border-l-4 border-l-amber-400">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ClipboardCheck className="w-4 h-4 text-amber-700" />
-                    <h3 className="instruction-section-heading text-amber-700">Deliverable</h3>
-                  </div>
-                  <div className="markdown-content text-gray-900 whitespace-pre-wrap">
-                    {parsedInstructions.deliverable}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {checklistItems.length > 0 && (
-              <Card className="instruction-section-card">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <h3 className="instruction-section-heading text-emerald-700">Checklist</h3>
-                  </div>
-                  <ul className="space-y-2">
-                    {checklistItems.map((item, index) => (
-                      <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-gray-800">
-                        <span className="mt-1 h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {parsedInstructions.tips && (
-              <Card className="instruction-section-card border-l-4 border-l-blue-400">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Lightbulb className="w-4 h-4 text-blue-600" />
-                    <h3 className="instruction-section-heading text-blue-700">Tips</h3>
-                  </div>
-                  <div className="markdown-content text-gray-900 whitespace-pre-wrap">
-                    {parsedInstructions.tips}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+          <div className={`max-w-3xl mx-auto space-y-4 transition-all duration-150 ${isStepTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
+            <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
 
             {/* Prompt Blocks */}
             {currentStep.prompt_blocks.length > 0 && (
@@ -693,20 +714,46 @@ export function WorkshopRunner({
                         />
                         <button
                           type="button"
+                          aria-label="Remove image"
                           onClick={() => {
                             setImageFile(null);
                             setImagePreview(null);
                             setImageMarkedForRemoval(true);
                           }}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow hover:bg-red-600 transition-colors"
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow hover:bg-red-600 transition-colors"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
                     ) : (
-                      <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-400 hover:bg-brand-50/50 transition-colors">
+                      <label
+                        className={`flex items-center gap-2 px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                          isDraggingOver
+                            ? 'border-brand-400 bg-brand-50/50'
+                            : 'border-gray-300 hover:border-brand-400 hover:bg-brand-50/50'
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+                        onDragLeave={() => setIsDraggingOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (!file) return;
+                          if (!file.type.match(/^image\/(png|jpeg|gif|webp)$/)) {
+                            toast.error('Please upload a PNG, JPEG, GIF, or WebP image');
+                            return;
+                          }
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('Image must be under 5MB');
+                            return;
+                          }
+                          setImageFile(file);
+                          setImageMarkedForRemoval(false);
+                          setImagePreview(URL.createObjectURL(file));
+                        }}
+                      >
                         <ImagePlus className="w-5 h-5 text-gray-400" />
-                        <span className="text-sm text-gray-500">Upload a screenshot or image</span>
+                        <span className="text-sm text-gray-500">Upload a screenshot or image (max 5MB)</span>
                         <input
                           type="file"
                           accept="image/png,image/jpeg,image/gif,image/webp"
@@ -756,13 +803,34 @@ export function WorkshopRunner({
               </Card>
             )}
 
+            {recentSubmissionStepId === currentStep.id && (
+              <Card className="border-emerald-200 bg-emerald-50/80">
+                <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">This step is captured.</p>
+                    <p className="text-sm text-emerald-700">You can keep refining it, move to the next step, or ask a question before continuing.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!isLastStep && (
+                      <Button size="sm" onClick={() => attemptStepNavigation(currentStepIndex + 1)}>
+                        Continue
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => setIsQAOpen(true)}>
+                      Review or ask
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Help & Q&A Buttons */}
             <div className="flex items-center justify-center gap-3">
               <Button
                 variant="ghost"
                 onClick={handleStuck}
                 disabled={isStuck}
-                className="text-gray-500"
+                className="text-white"
               >
                 <AlertCircle className="w-4 h-4 mr-2" />
                 {isStuck ? 'Help requested' : "I'm stuck"}
@@ -770,12 +838,15 @@ export function WorkshopRunner({
               <Button
                 variant="ghost"
                 onClick={() => setIsQAOpen(true)}
-                className="text-gray-500 relative"
+                className="text-white relative"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
                 Ask a Question
                 {questions.filter(q => !q.is_answered).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-600 text-white text-xs rounded-full flex items-center justify-center">
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-brand-600 text-white text-xs rounded-full flex items-center justify-center"
+                    aria-label={`${questions.filter(q => !q.is_answered).length} unanswered questions`}
+                  >
                     {questions.filter(q => !q.is_answered).length}
                   </span>
                 )}
@@ -787,8 +858,11 @@ export function WorkshopRunner({
         {/* Q&A Slide-out Panel */}
         {isQAOpen && (
           <div className="fixed inset-0 z-50 flex justify-end">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setIsQAOpen(false)} />
-            <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full">
+            <div
+              className="absolute inset-0 bg-black/30 transition-opacity duration-300"
+              onClick={() => setIsQAOpen(false)}
+            />
+            <div className="relative w-full sm:max-w-md bg-white shadow-2xl flex flex-col h-full animate-[slideInRight_0.3s_ease-out]">
               {/* Panel Header */}
               <div className="flex items-center justify-between p-4 border-b">
                 <h2 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -807,6 +881,7 @@ export function WorkshopRunner({
               <div className="p-4 border-b bg-gray-50">
                 <div className="flex gap-2">
                   <input
+                    ref={qaFirstFocusRef}
                     type="text"
                     value={questionText}
                     onChange={(e) => setQuestionText(e.target.value)}
@@ -818,7 +893,8 @@ export function WorkshopRunner({
                   <button
                     onClick={handleAskQuestion}
                     disabled={!questionText.trim() || isAskingQuestion}
-                    className="p-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Send question"
+                    className="p-2 min-h-[44px] min-w-[44px] bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -828,9 +904,9 @@ export function WorkshopRunner({
               {/* Questions List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {questions.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No questions yet. Be the first to ask!</p>
+                  <div className="text-center py-8 text-gray-300">
+                    <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-70" />
+                    <p className="text-sm text-gray-400">No questions yet. Be the first to ask!</p>
                   </div>
                 ) : (
                   questions.map((q) => (
@@ -878,23 +954,27 @@ export function WorkshopRunner({
                   <AlertCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Skip this step for now?</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Move on and come back later?</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    You have not submitted your response for <span className="font-medium">{currentStep.title}</span>.
+                    You have not captured your response for <span className="font-medium">{currentStep.title}</span> yet.
                   </p>
                 </div>
               </div>
 
               <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 mb-5">
                 {deliverablePreview
-                  ? `Expected deliverable: ${deliverablePreview}`
-                  : 'You can continue now and return later, but this step will be marked as skipped.'}
+                  ? `Done enough for this step looks like: ${deliverablePreview}`
+                  : 'You can keep your momentum and return later. We will mark this step as not finished yet rather than complete.'}
               </div>
 
+              <p className="text-sm text-gray-600 mb-5">
+                If you continue now, you can still return later to refine and submit this step when you are ready.
+              </p>
+
               <div className="flex items-center justify-end gap-2">
-                <Button onClick={closeSkipWarning}>Stay and complete</Button>
+                <Button onClick={closeSkipWarning}>Stay with this step</Button>
                 <Button variant="secondary" onClick={confirmSkipAndContinue}>
-                  Skip for now
+                  Continue and return later
                 </Button>
               </div>
             </div>
@@ -902,7 +982,7 @@ export function WorkshopRunner({
         )}
 
         {/* Footer Navigation */}
-        <footer className="glass-strong border-t border-white/20 px-6 py-4">
+        <footer className="sticky bottom-0 z-40 glass-strong border-t border-white/20 px-6 py-4">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
             <Button
               variant="outline"

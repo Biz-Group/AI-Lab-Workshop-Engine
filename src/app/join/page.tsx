@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Mail, Sparkles } from 'lucide-react';
 import { Button, Input, Card, CardContent } from '@/components/ui';
 import { isValidJoinCodeFormat, formatJoinCodeForDisplay } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -67,7 +67,7 @@ export default function JoinPage() {
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-lg">
+        <Card className="w-full max-w-md mx-4 sm:mx-auto shadow-lg">
           <CardContent className="p-8">
             <div className="text-center mb-8">
               <Image
@@ -81,8 +81,29 @@ export default function JoinPage() {
                 Join Workshop
               </h1>
               <p className="text-gray-600">
-                Enter the code shown on the presenter's screen
+                Enter the code shown on the presenter&apos;s screen to join the live workshop
               </p>
+            </div>
+
+            <div className="mb-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-3">What happens next</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-white p-3 border border-gray-200">
+                  <CheckCircle2 className="w-4 h-4 text-brand-600 mb-2" />
+                  <p className="text-sm font-medium text-gray-900">Join quickly</p>
+                  <p className="text-xs text-gray-500 mt-1">Confirm the code and enter your details once.</p>
+                </div>
+                <div className="rounded-xl bg-white p-3 border border-gray-200">
+                  <Sparkles className="w-4 h-4 text-brand-600 mb-2" />
+                  <p className="text-sm font-medium text-gray-900">Build as you go</p>
+                  <p className="text-xs text-gray-500 mt-1">Follow guided steps that show why each activity matters.</p>
+                </div>
+                <div className="rounded-xl bg-white p-3 border border-gray-200">
+                  <Mail className="w-4 h-4 text-brand-600 mb-2" />
+                  <p className="text-sm font-medium text-gray-900">Keep the outputs</p>
+                  <p className="text-xs text-gray-500 mt-1">Receive your prompt pack and takeaways after the workshop.</p>
+                </div>
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">

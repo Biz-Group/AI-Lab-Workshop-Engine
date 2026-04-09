@@ -44,7 +44,7 @@ describe('NarrativeProgressMap', () => {
       />
     );
 
-    expect(screen.getByText('Skipped')).toBeTruthy();
+    expect(screen.getByText('Come back later')).toBeTruthy();
     expect(screen.getByText('Step 1').className).toContain('text-amber-700');
   });
 
@@ -87,7 +87,7 @@ describe('NarrativeProgressMap', () => {
       />
     );
 
-    expect(screen.queryByText('Skipped')).toBeNull();
+    expect(screen.queryByText('Come back later')).toBeNull();
     expect(screen.getByText('Step 1').className).toContain('text-gray-600');
     expect(screen.getByText('Step 2').className).toContain('text-brand-700');
     expect(screen.getByText('Step 3').className).toContain('text-gray-400');

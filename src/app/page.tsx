@@ -80,9 +80,8 @@ export default function HomePage() {
         <div className="flex-1">
           <div className="max-w-lg">
             <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-6">
-              Interactive AI<br />
-              Workshops,{' '}
-              <span className="text-white/90">Made Simple</span>
+              Guided AI workshops<br />
+              with a clear path from <span className="text-white/90">first prompt to final takeaway</span>
             </h1>
             <p className="text-lg text-white/75 mb-10 leading-relaxed">
               Join live, facilitator-led sessions to master prompt engineering — 
@@ -100,13 +99,13 @@ export default function HomePage() {
                 <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
                   <Users className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm">Follow along at your own pace with guided steps</span>
+                <span className="text-sm">Understand where you are, why it matters, and what good looks like</span>
               </div>
               <div className="flex items-center gap-3 text-white/80">
                 <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm">Get a personalized prompt pack when you finish</span>
+                <span className="text-sm">Leave with a personalized prompt pack and your saved outputs</span>
               </div>
             </div>
           </div>

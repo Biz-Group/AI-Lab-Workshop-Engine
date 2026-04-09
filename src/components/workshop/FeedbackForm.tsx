@@ -85,10 +85,10 @@ export function FeedbackForm({
         {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            How was the workshop?
+            Before you take your prompt pack
           </h2>
           <p className="text-gray-600">
-            Share your feedback to receive your Prompt Pack
+            Share a quick reflection on what worked for you so we can make the next workshop even better.
           </p>
         </div>
 
@@ -103,6 +103,7 @@ export function FeedbackForm({
                 <button
                   key={star}
                   type="button"
+                  aria-label={`Rate ${star} out of 5`}
                   onClick={() => {
                     setRating(star);
                     setErrors({ ...errors, rating: '' });
@@ -114,7 +115,7 @@ export function FeedbackForm({
                   <Star
                     className={`w-10 h-10 ${
                       star <= (hoveredRating || rating)
-                        ? 'fill-yellow-400 text-yellow-400'
+                        ? 'fill-amber-400 text-amber-400'
                         : 'text-gray-300'
                     }`}
                   />
@@ -186,7 +187,7 @@ export function FeedbackForm({
             {!isSubmitting && (
               <>
                 <CheckCircle className="w-5 h-5 mr-2" />
-                Submit Feedback & Get Prompt Pack
+                Save Reflection & Open Prompt Pack
               </>
             )}
           </Button>

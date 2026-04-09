@@ -9,13 +9,13 @@ import {
   Trophy,
   Eye,
   ExternalLink,
-  BookOpen,
   Clock,
 } from 'lucide-react';
 import { Button, Card, CardContent } from '@/components/ui';
 import { NarrativeProgressMap } from '@/components/workshop/NarrativeProgressMap';
+import { StepNarrativeSections } from '@/components/workshop/StepNarrativeSections';
 import { ChapterCelebration, useChapterCelebration } from '@/components/workshop/ChapterCelebration';
-import { cn } from '@/lib/utils';
+import { cn, parseStepInstructions } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 interface PromptBlockType {
@@ -185,6 +185,8 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
   const totalSteps = allSteps.length;
   const currentStep = allSteps[currentStepIndex];
   const isLastStep = currentStepIndex === totalSteps - 1;
+  const parsedInstructions = parseStepInstructions(currentStep?.instruction_markdown || '');
+  const nextStepTitle = allSteps[currentStepIndex + 1]?.title ?? null;
 
   // Build narrative steps for sidebar and celebration tracking
   const narrativeSteps = allSteps.map((step, index) => ({
@@ -207,7 +209,7 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
   // Chapter celebration on module transitions
   const { celebration, dismissCelebration } = useChapterCelebration(
     narrativeSteps.map(s => ({ id: s.id, moduleIndex: s.moduleIndex, status: s.status })),
-    modules.map(m => ({ title: m.title }))
+    modules.map(m => ({ title: m.title, objective: m.objective }))
   );
 
   const goToStep = useCallback(
@@ -242,6 +244,7 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
           chapterTitle={modules[celebration.chapterNumber - 1]?.title ?? ''}
           chapterNumber={celebration.chapterNumber}
           totalChapters={celebration.totalChapters}
+          chapterObjective={celebration.chapterObjective}
           isFinalChapter={celebration.isFinalChapter}
           onDismiss={dismissCelebration}
         />
@@ -323,19 +326,33 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
               </span>
             </div>
           </div>
+          <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">Participant context</p>
+                <p className="text-sm font-medium text-gray-900">{parsedInstructions.objective || currentStep.moduleTitle}</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  {parsedInstructions.deliverable || 'Participants will use this step to create or refine a concrete output.'}
+                </p>
+              </div>
+              <div className="md:max-w-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">What this unlocks</p>
+                <p className="text-sm text-gray-700">
+                  {parsedInstructions.nextUp || (nextStepTitle ? `Next up: ${nextStepTitle}.` : 'This closes the journey and leads into the prompt pack handoff.')}
+                </p>
+              </div>
+            </div>
+          </div>
         </header>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl mx-auto space-y-6">
-            {/* Instructions */}
-            {currentStep.instruction_markdown && (
+            <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
+
+            {!parsedInstructions.actions && currentStep.instruction_markdown && (
               <Card className="border-l-4 border-l-brand-400 shadow-sm">
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BookOpen className="w-4 h-4 text-brand-600" />
-                    <h3 className="text-sm font-semibold text-brand-700 uppercase tracking-wide">Instructions</h3>
-                  </div>
                   <FormattedContent
                     content={currentStep.instruction_markdown}
                     className="text-gray-800 text-[15px]"

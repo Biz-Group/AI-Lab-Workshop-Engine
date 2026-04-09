@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         id,
         status,
         organization:organizations(name),
-        template:workshop_templates(name)
+        template:workshop_templates(name, description, estimated_duration_minutes)
       `)
       .ilike('join_code', normalizedCode)
       .in('status', ['published', 'live'])
@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
           status: session.status,
           organizationName: getJoinField(session.organization, 'name') || 'Workshop',
           templateName: getJoinField(session.template, 'name') || 'Session',
+          templateDescription: getJoinField(session.template, 'description') || null,
+          estimatedDurationMinutes: getJoinField(session.template, 'estimated_duration_minutes') || null,
         },
       },
       {

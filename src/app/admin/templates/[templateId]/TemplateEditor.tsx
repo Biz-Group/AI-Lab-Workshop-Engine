@@ -993,8 +993,12 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
             label="Instructions"
             value={editForm.instruction_markdown}
             onChange={(e) => setEditForm(prev => ({ ...prev, instruction_markdown: e.target.value }))}
-            rows={4}
+            rows={8}
+            placeholder={'Why this matters: Explain the value of the step.\n\nActions:\n1. Tell participants what to do.\n\nDeliverable:\nWhat should they leave with?\n\nSuccess signal:\nHow will they know this is strong enough?\n\nReflect:\nWhat should they notice or learn?\n\nNext up:\nWhat does this prepare them for next?'}
           />
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+            Guide participants through a full learning beat: why this matters, what to do, what to submit, how to judge success, and what comes next.
+          </div>
           <Input
             label="Duration (minutes)"
             type="number"
@@ -1272,9 +1276,12 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
             label="Instructions (optional)"
             value={instructionMarkdown}
             onChange={(e) => setInstructionMarkdown(e.target.value)}
-            rows={3}
-            placeholder="Instructions shown to participants"
+            rows={8}
+            placeholder={'Why this matters: Explain the value of the step.\n\nActions:\n1. Tell participants what to do.\n\nDeliverable:\nWhat should they leave with?\n\nSuccess signal:\nHow will they know this is strong enough?\n\nReflect:\nWhat should they notice or learn?\n\nNext up:\nWhat does this prepare them for next?'}
           />
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+            Recommended structure: Why this matters, Actions, Deliverable, Checklist, Tips, Success signal, Reflect, and Next up.
+          </div>
           <Input
             label="Duration (minutes)"
             type="number"

@@ -3,7 +3,10 @@ export type StepInstructionSection =
   | 'actions'
   | 'deliverable'
   | 'checklist'
-  | 'tips';
+  | 'tips'
+  | 'successSignal'
+  | 'reflection'
+  | 'nextUp';
 
 export interface ParsedStepInstructions {
   objective?: string;
@@ -11,6 +14,9 @@ export interface ParsedStepInstructions {
   deliverable?: string;
   checklist?: string;
   tips?: string;
+  successSignal?: string;
+  reflection?: string;
+  nextUp?: string;
 }
 
 type DetectedHeader = {
@@ -31,10 +37,17 @@ const HEADER_TO_SECTION: Record<string, StepInstructionSection> = {
   'what to submit': 'deliverable',
   checklist: 'checklist',
   'done when': 'checklist',
+  'success signal': 'successSignal',
+  success: 'successSignal',
+  reflect: 'reflection',
+  reflection: 'reflection',
+  'next up': 'nextUp',
+  next: 'nextUp',
   tip: 'tips',
   tips: 'tips',
   hint: 'tips',
   hints: 'tips',
+  'why this matters': 'objective',
 };
 
 function normalizeHeaderLabel(label: string): string {
@@ -108,6 +121,9 @@ export function parseStepInstructions(instructionMarkdown: string | null | undef
     deliverable: [],
     checklist: [],
     tips: [],
+    successSignal: [],
+    reflection: [],
+    nextUp: [],
   };
   const prefaceLines: string[] = [];
 

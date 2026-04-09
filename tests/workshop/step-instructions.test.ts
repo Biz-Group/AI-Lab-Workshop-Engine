@@ -20,6 +20,15 @@ Submit one polished response.
 
 ## Tips
 Keep it concise and specific.
+
+## Success Signal
+It feels ready to test with a real user.
+
+## Reflect
+Notice which detail made your response more useful.
+
+## Next Up
+You will refine this into a stronger final version.
 `;
 
     const parsed = parseStepInstructions(input);
@@ -29,6 +38,9 @@ Keep it concise and specific.
     expect(parsed.deliverable).toContain('Submit one polished response');
     expect(parsed.checklist).toContain('Response includes context');
     expect(parsed.tips).toContain('Keep it concise and specific');
+    expect(parsed.successSignal).toContain('ready to test');
+    expect(parsed.reflection).toContain('more useful');
+    expect(parsed.nextUp).toContain('stronger final version');
   });
 
   it('supports mixed alias headers and inline content', () => {
@@ -40,6 +52,8 @@ Done When:
 - It is under 70 words
 - It includes one clear ask
 Hints: Use plain language.
+Reflect: Notice what became clearer.
+Next: Use this draft in the next exercise.
 `;
 
     const parsed = parseStepInstructions(input);
@@ -49,6 +63,8 @@ Hints: Use plain language.
     expect(parsed.deliverable).toBe('Paste your final message.');
     expect(parsed.checklist).toContain('It is under 70 words');
     expect(parsed.tips).toBe('Use plain language.');
+    expect(parsed.reflection).toBe('Notice what became clearer.');
+    expect(parsed.nextUp).toBe('Use this draft in the next exercise.');
   });
 
   it('falls back to actions for legacy plain text instructions', () => {

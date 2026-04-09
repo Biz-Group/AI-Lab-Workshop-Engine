@@ -8,6 +8,7 @@ interface ChapterCelebrationProps {
   chapterTitle: string;
   chapterNumber: number;
   totalChapters: number;
+  chapterObjective?: string | null;
   isFinalChapter?: boolean;
   onDismiss: () => void;
 }
@@ -30,6 +31,7 @@ export function ChapterCelebration({
   chapterTitle,
   chapterNumber,
   totalChapters,
+  chapterObjective,
   isFinalChapter = false,
   onDismiss,
 }: ChapterCelebrationProps) {
@@ -72,6 +74,15 @@ export function ChapterCelebration({
     setIsVisible(false);
     setTimeout(() => onDismissRef.current(), 500);
   }, []);
+
+  // Escape key to dismiss
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleDismiss();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleDismiss]);
 
   return (
     <div
@@ -132,6 +143,14 @@ export function ChapterCelebration({
           {chapterTitle}
         </p>
 
+        <p className="text-sm text-gray-600 mb-4">
+          {chapterObjective
+            ? `You now have: ${chapterObjective}`
+            : isFinalChapter
+              ? 'You now have a full set of workshop outputs to take forward.'
+              : 'You have something concrete to carry into the next chapter.'}
+        </p>
+
         {/* Stars earned */}
         <div className="flex items-center justify-center gap-1 mb-4">
           {[...Array(3)].map((_, i) => (
@@ -173,12 +192,13 @@ export function ChapterCelebration({
 // Hook to manage chapter celebrations
 export function useChapterCelebration(
   steps: { id: string; moduleIndex: number; status: string }[],
-  modules: { title: string }[]
+  modules: { title: string; objective?: string | null }[]
 ) {
   const [celebration, setCelebration] = useState<{
     chapterTitle: string;
     chapterNumber: number;
     totalChapters: number;
+    chapterObjective?: string | null;
     isFinalChapter: boolean;
   } | null>(null);
   const celebratedModulesRef = React.useRef<Set<number>>(new Set());
@@ -196,6 +216,7 @@ export function useChapterCelebration(
           chapterTitle: modules[moduleIndex].title,
           chapterNumber: moduleIndex + 1,
           totalChapters: modules.length,
+          chapterObjective: modules[moduleIndex].objective || null,
           isFinalChapter: moduleIndex === modules.length - 1,
         });
         break; // Only show one celebration at a time

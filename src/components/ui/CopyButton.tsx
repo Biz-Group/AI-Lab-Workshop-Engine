@@ -28,7 +28,7 @@ export function CopyButton({ text, className, onCopy }: CopyButtonProps) {
       toast.success('Copied to clipboard!');
       onCopy?.();
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), 2000);
+      timerRef.current = setTimeout(() => setCopied(false), 2500);
     } else {
       toast.error('Failed to copy');
     }

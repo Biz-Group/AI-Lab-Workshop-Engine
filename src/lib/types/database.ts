@@ -5,9 +5,16 @@
 export type SessionStatus = 'draft' | 'published' | 'live' | 'ended';
 export type UserRole = 'owner' | 'admin' | 'facilitator';
 export type EventType = 
+  | 'join_verified'
+  | 'join_completed'
+  | 'waiting_viewed'
+  | 'step_started'
   | 'step_viewed' 
   | 'step_completed' 
+  | 'step_skipped'
   | 'prompt_copied' 
+  | 'question_asked'
+  | 'session_end_viewed'
   | 'stuck_signal' 
   | 'chatgpt_opened'
   | 'pdf_downloaded'

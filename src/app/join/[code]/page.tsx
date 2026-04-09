@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AlertCircle, CheckCircle2, Clock3, Mail, Sparkles } from 'lucide-react';
 import { Button, Input, Card, CardContent, LoadingSpinner } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -12,6 +12,8 @@ interface SessionInfo {
   id: string;
   organizationName: string;
   templateName: string;
+  templateDescription: string | null;
+  estimatedDurationMinutes: number | null;
   status: string;
 }
 
@@ -101,6 +103,29 @@ export default function JoinWithCodePage() {
         return;
       }
 
+      await Promise.allSettled([
+        fetch('/api/analytics/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            participantId: data.participant.id,
+            sessionId: sessionInfo.id,
+            eventType: 'join_verified',
+            payload: { code },
+          }),
+        }),
+        fetch('/api/analytics/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            participantId: data.participant.id,
+            sessionId: sessionInfo.id,
+            eventType: 'join_completed',
+            payload: { code },
+          }),
+        }),
+      ]);
+
       // Redirect to session
       router.push(`/s/${sessionInfo.id}`);
     } catch {
@@ -125,7 +150,7 @@ export default function JoinWithCodePage() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md mx-4 sm:mx-auto">
           <CardContent className="p-8 text-center">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-8 h-8 text-red-600" />
@@ -159,7 +184,7 @@ export default function JoinWithCodePage() {
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-lg">
+        <Card className="w-full max-w-2xl mx-4 sm:mx-auto shadow-lg">
           <CardContent className="p-8">
             <div className="text-center mb-8">
               <Image
@@ -181,6 +206,40 @@ export default function JoinWithCodePage() {
                 </p>
               )}
             </div>
+
+            {sessionInfo && (
+              <div className="mb-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Your workshop path</p>
+                    <h2 className="text-sm font-semibold text-gray-900">Join, build, leave with your prompt pack</h2>
+                  </div>
+                  {sessionInfo.estimatedDurationMinutes ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600">
+                      <Clock3 className="w-3.5 h-3.5" />
+                      About {sessionInfo.estimatedDurationMinutes} min
+                    </span>
+                  ) : null}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl bg-white p-3 border border-gray-200">
+                    <CheckCircle2 className="w-4 h-4 text-brand-600 mb-2" />
+                    <p className="text-sm font-medium text-gray-900">Join</p>
+                    <p className="text-xs text-gray-500 mt-1">Enter once and we&apos;ll keep your place as the session unfolds.</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-3 border border-gray-200">
+                    <Sparkles className="w-4 h-4 text-brand-600 mb-2" />
+                    <p className="text-sm font-medium text-gray-900">Build</p>
+                    <p className="text-xs text-gray-500 mt-1">Each step will show why it matters, what to do, and what good looks like.</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-3 border border-gray-200">
+                    <Mail className="w-4 h-4 text-brand-600 mb-2" />
+                    <p className="text-sm font-medium text-gray-900">Keep the takeaway</p>
+                    <p className="text-xs text-gray-500 mt-1">Your email is used to send your prompt pack and workshop takeaways afterwards.</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Display Name */}
@@ -206,7 +265,7 @@ export default function JoinWithCodePage() {
                   setFormErrors({ ...formErrors, email: '' });
                 }}
                 placeholder="your@email.com"
-                hint="We'll send your Prompt Pack here after you complete the feedback"
+                hint="We use this to send your prompt pack and workshop takeaways when you finish."
                 error={formErrors.email}
                 required
               />
@@ -226,7 +285,7 @@ export default function JoinWithCodePage() {
             </form>
 
             <p className="mt-6 text-xs text-gray-500 text-center">
-              By joining, you agree that your data will be automatically deleted after 72 hours.
+              Your session data is automatically deleted after 72 hours.
             </p>
           </CardContent>
         </Card>

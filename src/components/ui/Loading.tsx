@@ -17,7 +17,7 @@ export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) 
   };
 
   return (
-    <Loader2 className={cn('animate-spin text-brand-600', sizes[size], className)} />
+    <Loader2 className={cn('animate-spin text-brand-600', sizes[size], className)} role="status" aria-label="Loading" />
   );
 }
 
