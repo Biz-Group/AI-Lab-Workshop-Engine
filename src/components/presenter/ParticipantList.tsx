@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase';
 import {
@@ -56,6 +56,7 @@ export function ParticipantList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
+  const dismissedStuckRef = useRef<Set<string>>(new Set());
 
   // Fetch participants and their progress
   const fetchParticipants = useCallback(async () => {
@@ -86,6 +87,11 @@ export function ParticipantList({
       .gte('created_at', fiveMinutesAgo);
 
     const stuckParticipantIds = new Set(stuckData?.map(s => s.participant_id) || []);
+
+    // Exclude dismissed stuck signals
+    for (const dismissedId of dismissedStuckRef.current) {
+      stuckParticipantIds.delete(dismissedId);
+    }
 
     // Build participant info
     const enriched: ParticipantInfo[] = participantsData.map(p => {
@@ -232,6 +238,7 @@ export function ParticipantList({
 
   // Dismiss stuck signal
   const dismissStuck = (participantId: string) => {
+    dismissedStuckRef.current.add(participantId);
     setParticipants(prev =>
       prev.map(p => p.id === participantId ? { ...p, is_stuck: false } : p)
     );

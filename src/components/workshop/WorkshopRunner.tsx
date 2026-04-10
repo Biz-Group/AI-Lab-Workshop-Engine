@@ -223,6 +223,23 @@ export function WorkshopRunner({
     };
   }, [initialSession.id, router]);
 
+  // Subscribe to broadcast channel for timer/session events from presenter
+  useEffect(() => {
+    const supabase = createClient();
+
+    const broadcastChannel = supabase
+      .channel(`workshop-broadcast:${initialSession.id}`)
+      .on('broadcast', { event: 'timer_update' }, (payload) => {
+        const timerEndAt = (payload.payload as { timer_end_at: string | null }).timer_end_at;
+        setSession(prev => ({ ...prev, timerEndAt }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(broadcastChannel);
+    };
+  }, [initialSession.id]);
+
   // Subscribe to Q&A realtime updates (separate effect so fetchQuestions is always current)
   useEffect(() => {
     const supabase = createClient();

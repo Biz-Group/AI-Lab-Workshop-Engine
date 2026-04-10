@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -75,6 +75,7 @@ export function PresenterView({
   const [completedCount, setCompletedCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const broadcastChannelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
 
   // Q&A state
   interface Question {
@@ -180,10 +181,17 @@ export function PresenterView({
       }
     });
 
+    // Broadcast channel for timer/session events to participants
+    const bcastChannel = supabase.channel(`workshop-broadcast:${initialSession.id}`);
+    bcastChannel.subscribe();
+    broadcastChannelRef.current = bcastChannel;
+
     return () => {
       mounted = false;
       supabase.removeChannel(presenterChannel);
       supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(bcastChannel);
+      broadcastChannelRef.current = null;
     };
   }, [initialSession.id]);
 
@@ -287,11 +295,25 @@ export function PresenterView({
   // Timer
   const startTimer = async (minutes: number) => {
     const endAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-    await updateSession({ timer_end_at: endAt });
+    const success = await updateSession({ timer_end_at: endAt });
+    if (success) {
+      broadcastChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'timer_update',
+        payload: { timer_end_at: endAt },
+      });
+    }
   };
 
   const stopTimer = async () => {
-    await updateSession({ timer_end_at: null });
+    const success = await updateSession({ timer_end_at: null });
+    if (success) {
+      broadcastChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'timer_update',
+        payload: { timer_end_at: null },
+      });
+    }
   };
 
   // Fetch Q&A
