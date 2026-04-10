@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { verifySessionToken } from '@/lib/utils/session-token';
 import { getJoinField } from '@/lib/utils/supabase-join';
+import { buildPromptPackData } from '@/lib/server/prompt-pack';
+import {
+  escapeHtml as escapePromptPackHtml,
+  formatPromptPackInstructionSections,
+} from '@/lib/utils/prompt-pack';
 
 function escapeHtml(str: string): string {
   return str
@@ -18,6 +23,98 @@ const emailPromptPackSchema = z.object({
   participantId: z.string().uuid(),
   email: z.string().email('Please enter a valid email address'),
 });
+
+function renderPromptPackEmailHtml(participantName: string, promptPack: Awaited<ReturnType<typeof buildPromptPackData>>) {
+  const promptsHTML = promptPack.entries
+    .map((entry, index) => {
+      const instructionSections = formatPromptPackInstructionSections(entry.stepInstructions)
+        .map(
+          (section) => `
+            <div style="margin-bottom: 10px;">
+              <div style="font-size: 12px; font-weight: 700; color: #111827; margin-bottom: 4px;">${escapePromptPackHtml(section.label)}</div>
+              <div style="font-size: 13px; color: #374151; white-space: pre-wrap;">${escapePromptPackHtml(section.content)}</div>
+            </div>
+          `
+        )
+        .join('');
+
+      const promptBlocksHtml = entry.promptBlocks
+        .map(
+          (block) => `
+            <div style="margin-bottom: 10px;">
+              <div style="font-size: 12px; font-weight: 700; color: #111827; margin-bottom: 4px;">${escapePromptPackHtml(block.title)}</div>
+              <div style="font-size: 13px; color: #374151; white-space: pre-wrap;">${escapePromptPackHtml(block.content)}</div>
+            </div>
+          `
+        )
+        .join('');
+
+      const responseHtml = entry.participantResponse?.content
+        ? escapePromptPackHtml(entry.participantResponse.content)
+        : 'No saved text response for this step. The workshop prompt is still included for reuse later.';
+
+      const imageHtml = entry.participantResponse?.imageUrl
+        ? `<p style="font-size: 12px; color: #6b7280; margin-top: 8px;">Image submission captured during session: ${escapePromptPackHtml(entry.participantResponse.imageUrl)}</p>`
+        : '';
+
+      return `
+        <div style="background: #f9fafb; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            <span style="background: #2563eb; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold;">#${index + 1}</span>
+            ${escapePromptPackHtml(entry.moduleTitle)}
+          </div>
+          <h3 style="font-size: 16px; margin-bottom: 12px; color: #1a1a1a;">${escapePromptPackHtml(entry.stepTitle)}</h3>
+          ${
+            instructionSections
+              ? `<div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                  <div style="font-size: 12px; font-weight: 700; color: #111827; margin-bottom: 8px;">Attendee Prompt</div>
+                  ${instructionSections}
+                </div>`
+              : ''
+          }
+          ${
+            promptBlocksHtml
+              ? `<div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                  <div style="font-size: 12px; font-weight: 700; color: #111827; margin-bottom: 8px;">Prompt Blocks</div>
+                  ${promptBlocksHtml}
+                </div>`
+              : ''
+          }
+          <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 12px;">
+            <div style="font-size: 12px; font-weight: 700; color: #1e3a8a; margin-bottom: 8px;">Participant Response</div>
+            <div style="font-family: monospace; font-size: 13px; color: #1f2937; white-space: pre-wrap;">${responseHtml}</div>
+            ${imageHtml}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="font-size: 24px; color: #6366f1; margin-bottom: 8px;">Your Prompt Pack</h1>
+        <p style="color: #666;">From ${escapePromptPackHtml(promptPack.workshopName)}</p>
+        <p style="color: #888; font-size: 14px;">${escapePromptPackHtml(promptPack.organizationName)}</p>
+      </div>
+      <p style="margin-bottom: 24px;">Hi ${escapePromptPackHtml(participantName)},</p>
+      <p style="margin-bottom: 24px;">Thanks for attending the workshop. Here is your prompt pack with the workshop prompts, prompt blocks, and your saved responses.</p>
+      ${promptsHTML}
+      <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
+      <p style="font-size: 14px; color: #888; text-align: center;">
+        You received this email because you requested your prompt pack.<br>
+        Powered by Workshop Runner
+      </p>
+    </body>
+    </html>
+  `;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -131,6 +228,37 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const promptPack = await buildPromptPackData(sessionId, participantId);
+    const html = renderPromptPackEmailHtml(participant.display_name, promptPack);
+
+    const legacyEmailResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM || 'Workshop Runner <noreply@workshop.run>',
+        to: [email],
+        subject: `Your Prompt Pack from ${promptPack.workshopName}`,
+        html,
+      }),
+    });
+
+    if (!legacyEmailResponse.ok) {
+      const errorData = await legacyEmailResponse.json();
+      console.error('Resend API error:', errorData);
+      return NextResponse.json(
+        { success: false, error: 'Failed to send email' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Email sent successfully',
+    });
+
     // Fetch prompts for email content
     const { data: modules } = await supabase
       .from('session_snapshot_modules')
@@ -205,36 +333,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         from: process.env.EMAIL_FROM || 'Workshop Runner <noreply@workshop.run>',
         to: [email],
-        subject: `Your Prompt Pack from ${workshopName}`,
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-          </head>
-          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 32px;">
-              <h1 style="font-size: 24px; color: #6366f1; margin-bottom: 8px;">Your Prompt Pack</h1>
-              <p style="color: #666;">From ${workshopName}</p>
-              <p style="color: #888; font-size: 14px;">${orgName}</p>
-            </div>
-            
-            <p style="margin-bottom: 24px;">Hi ${escapeHtml(participant.display_name)},</p>
-            
-            <p style="margin-bottom: 24px;">Thanks for attending the workshop! Here are the prompts you created:</p>
-            
-            ${promptsHTML}
-            
-            <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
-            
-            <p style="font-size: 14px; color: #888; text-align: center;">
-              You received this email because you requested your prompt pack.<br>
-              Powered by Workshop Runner
-            </p>
-          </body>
-          </html>
-        `,
+        subject: `Your Prompt Pack from ${promptPack.workshopName}`,
+        html,
       }),
     });
 
@@ -259,3 +359,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export { renderPromptPackEmailHtml };

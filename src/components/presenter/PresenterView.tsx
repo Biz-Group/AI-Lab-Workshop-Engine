@@ -32,6 +32,10 @@ import { Button, Timer, Card, CardContent, ProgressBar, QrCodeModal } from '@/co
 import { ParticipantList } from './ParticipantList';
 import { createClient } from '@/lib/supabase';
 import { formatJoinCodeForDisplay, cn } from '@/lib/utils';
+import {
+  buildSessionParticipationCsv,
+  buildSessionParticipationRows,
+} from '@/lib/utils/session-analytics';
 import toast from 'react-hot-toast';
 
 interface Module {
@@ -90,6 +94,15 @@ export function PresenterView({
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [showAnswered, setShowAnswered] = useState(false);
   const [broadcastStatus, setBroadcastStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [participationSummary, setParticipationSummary] = useState({
+    totalParticipants: initialParticipantCount,
+    activeParticipants: 0,
+    participantsWithSubmissions: 0,
+    totalQuestions: 0,
+    totalStuckSignals: 0,
+    promptPackDownloads: 0,
+    promptPackEmails: 0,
+  });
 
   // Flatten steps (memoized)
   const allSteps = useMemo(() => modules.flatMap((module, moduleIndex) =>
@@ -106,94 +119,47 @@ export function PresenterView({
   const currentStep = allSteps[currentStepIndex] || allSteps[0];
   const isFirstStep = currentStepIndex <= 0;
   const isLastStep = currentStepIndex >= allSteps.length - 1;
+  const stepTitlesById = useMemo(
+    () => Object.fromEntries(allSteps.map((step) => [step.id, `${step.moduleTitle} / ${step.title}`])),
+    [allSteps]
+  );
 
-  // Subscribe to realtime updates + track facilitator presence
-  useEffect(() => {
+  const fetchParticipationAnalytics = useCallback(async () => {
     const supabase = createClient();
+    const [participantsResult, submissionsResult, analyticsResult, questionsResult] = await Promise.all([
+      supabase
+        .from('participants')
+        .select('id, display_name, email, joined_at, last_seen_at, current_step_id, feedback_submitted')
+        .eq('session_id', session.id)
+        .order('joined_at', { ascending: true }),
+      supabase
+        .from('submissions')
+        .select('participant_id, step_id')
+        .eq('session_id', session.id),
+      supabase
+        .from('analytics_events')
+        .select('participant_id, event_type')
+        .eq('session_id', session.id),
+      supabase
+        .from('session_questions')
+        .select('participant_id')
+        .eq('session_id', session.id),
+    ]);
 
-    // Combined presenter channel - listen for participants, stuck signals, submissions, and Q&A
-    const presenterChannel = supabase
-      .channel(`presenter:${initialSession.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'participants',
-          filter: `session_id=eq.${initialSession.id}`,
-        },
-        () => {
-          setParticipantCount(prev => prev + 1);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'analytics_events',
-          filter: `session_id=eq.${initialSession.id}`,
-        },
-        (payload) => {
-          if (payload.new.event_type === 'stuck_signal') {
-            setStuckCount(prev => prev + 1);
-            setTimeout(() => setStuckCount(prev => Math.max(0, prev - 1)), 30000);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'submissions',
-          filter: `session_id=eq.${initialSession.id}`,
-        },
-        () => {
-          // Refresh completion count when a new submission comes in
-          fetchCompletions();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_questions',
-          filter: `session_id=eq.${initialSession.id}`,
-        },
-        () => {
-          fetchQuestions();
-        }
-      )
-      .subscribe();
-
-    const presenceChannel = supabase.channel(`presence:${initialSession.id}`);
-    let mounted = true;
-
-    presenceChannel.subscribe(async (status) => {
-      if (!mounted) return;
-      if (status === 'SUBSCRIBED') {
-        setBroadcastStatus('connected');
-        await presenceChannel.track({ role: 'facilitator' });
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        setBroadcastStatus('error');
-      }
+    const { rows, summary } = buildSessionParticipationRows({
+      participants: participantsResult.data ?? [],
+      submissions: submissionsResult.data ?? [],
+      analyticsEvents: analyticsResult.data ?? [],
+      questions: questionsResult.data ?? [],
+      stepTitlesById,
     });
 
-    // Broadcast channel for timer/session events to participants
-    const bcastChannel = supabase.channel(`workshop-broadcast:${initialSession.id}`);
-    bcastChannel.subscribe();
-    broadcastChannelRef.current = bcastChannel;
+    setParticipantCount(summary.totalParticipants);
+    setStuckCount(summary.totalStuckSignals);
+    setParticipationSummary(summary);
 
-    return () => {
-      mounted = false;
-      supabase.removeChannel(presenterChannel);
-      supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(bcastChannel);
-      broadcastChannelRef.current = null;
-    };
-  }, [initialSession.id]);
+    return rows;
+  }, [session.id, stepTitlesById]);
 
   // Fetch completion count for current step
   const fetchCompletions = useCallback(async () => {
@@ -213,6 +179,10 @@ export function PresenterView({
   useEffect(() => {
     fetchCompletions();
   }, [fetchCompletions]);
+
+  useEffect(() => {
+    void fetchParticipationAnalytics();
+  }, [fetchParticipationAnalytics]);
 
   // Map snake_case API keys to camelCase state keys
   const mapApiToState = (updates: Record<string, unknown>): Record<string, unknown> => {
@@ -329,6 +299,92 @@ export function PresenterView({
     fetchQuestions();
   }, [fetchQuestions]);
 
+  // Subscribe to realtime updates + track facilitator presence
+  useEffect(() => {
+    const supabase = createClient();
+
+    const presenterChannel = supabase
+      .channel(`presenter:${initialSession.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'participants',
+          filter: `session_id=eq.${initialSession.id}`,
+        },
+        () => {
+          void fetchParticipationAnalytics();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'analytics_events',
+          filter: `session_id=eq.${initialSession.id}`,
+        },
+        (payload) => {
+          if (payload.new.event_type === 'stuck_signal') {
+            void fetchParticipationAnalytics();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'submissions',
+          filter: `session_id=eq.${initialSession.id}`,
+        },
+        () => {
+          fetchCompletions();
+          void fetchParticipationAnalytics();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'session_questions',
+          filter: `session_id=eq.${initialSession.id}`,
+        },
+        () => {
+          fetchQuestions();
+          void fetchParticipationAnalytics();
+        }
+      )
+      .subscribe();
+
+    const presenceChannel = supabase.channel(`presence:${initialSession.id}`);
+    let mounted = true;
+
+    presenceChannel.subscribe(async (status) => {
+      if (!mounted) return;
+      if (status === 'SUBSCRIBED') {
+        setBroadcastStatus('connected');
+        await presenceChannel.track({ role: 'facilitator' });
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setBroadcastStatus('error');
+      }
+    });
+
+    const bcastChannel = supabase.channel(`workshop-broadcast:${initialSession.id}`);
+    bcastChannel.subscribe();
+    broadcastChannelRef.current = bcastChannel;
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(presenterChannel);
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(bcastChannel);
+      broadcastChannelRef.current = null;
+    };
+  }, [fetchCompletions, fetchParticipationAnalytics, fetchQuestions, initialSession.id]);
+
   // Answer a question
   const answerQuestion = async (questionId: string) => {
     const text = answerDrafts[questionId]?.trim();
@@ -375,41 +431,16 @@ export function PresenterView({
 
   const exportCSV = async () => {
     try {
-      const supabase = createClient();
-      const { data: participants } = await supabase
-        .from('participants')
-        .select('display_name, created_at')
-        .eq('session_id', session.id)
-        .order('created_at');
-
-      const { data: submissions } = await supabase
-        .from('submissions')
-        .select('participant_id, step_id, content, created_at')
-        .eq('session_id', session.id)
-        .order('created_at');
-
-      let csv = 'Participant,Joined At,Step,Submission,Submitted At\n';
-      (participants || []).forEach(p => {
-        const subs = (submissions || []).filter((s: any) => {
-          // Match by participant - just include all for simplicity
-          return true;
-        });
-        if (subs.length === 0) {
-          csv += `"${p.display_name}","${p.created_at}","","",""\n`;
-        }
-      });
-      (submissions || []).forEach((s: any) => {
-        csv += `"","","${s.step_id}","${(s.content || '').replace(/"/g, '""')}","${s.created_at}"\n`;
-      });
-
+      const rows = await fetchParticipationAnalytics();
+      const csv = buildSessionParticipationCsv(rows);
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `session-${session.joinCode}-export.csv`;
+      a.download = `session-${session.joinCode}-participation.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('CSV exported');
+      toast.success('Participation CSV exported');
     } catch {
       toast.error('Failed to export');
     }
@@ -533,6 +564,35 @@ export function PresenterView({
                   <span className="text-xl font-bold">{completedCount}/{participantCount}</span>
                 </div>
                 <ProgressBar value={completionPercentage} className="bg-gray-600" />
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-700 border-gray-600">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Active now</span>
+                  <span className="font-semibold">{participationSummary.activeParticipants}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">With submissions</span>
+                  <span className="font-semibold">{participationSummary.participantsWithSubmissions}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Questions asked</span>
+                  <span className="font-semibold">{participationSummary.totalQuestions}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Stuck signals</span>
+                  <span className="font-semibold">{participationSummary.totalStuckSignals}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Pack downloads</span>
+                  <span className="font-semibold">{participationSummary.promptPackDownloads}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Pack emails</span>
+                  <span className="font-semibold">{participationSummary.promptPackEmails}</span>
+                </div>
               </CardContent>
             </Card>
 
@@ -725,7 +785,7 @@ export function PresenterView({
               onClick={exportCSV}
             >
               <Download className="w-4 h-4 mr-2" />
-              Export CSV
+              Export Participation CSV
             </Button>
             <Button
               variant="secondary"

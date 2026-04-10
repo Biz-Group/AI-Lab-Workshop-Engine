@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import React from 'react';
+import { renderToBuffer } from '@react-pdf/renderer';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { verifySessionToken } from '@/lib/utils/session-token';
 import { getJoinField } from '@/lib/utils/supabase-join';
+import { buildPromptPackData } from '@/lib/server/prompt-pack';
+import { PromptPackDocument } from '@/components/pdf/PromptPackDocument';
+
+export const runtime = 'nodejs';
 
 function escapeHtml(str: string): string {
   return str
@@ -250,107 +256,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createServiceClient();
-
-    // Fetch participant
-    const { data: participant, error: participantError } = await supabase
-      .from('participants')
-      .select('id, display_name, session_id')
-      .eq('id', participantId)
-      .eq('session_id', sessionId)
-      .single();
-
-    if (participantError || !participant) {
-      return NextResponse.json(
-        { success: false, error: 'Participant not found' },
-        { status: 404 }
-      );
-    }
-
-    // Fetch session with template info
-    const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .select(`
-        id,
-        ended_at,
-        organization:organizations(name),
-        workshop_template:workshop_templates(name)
-      `)
-      .eq('id', sessionId)
-      .single();
-
-    if (sessionError || !session) {
-      return NextResponse.json(
-        { success: false, error: 'Session not found' },
-        { status: 404 }
-      );
-    }
-
-    // Fetch modules and steps
-    const { data: modules } = await supabase
-      .from('session_snapshot_modules')
-      .select(`
-        id,
-        title,
-        order_index,
-        steps:session_snapshot_steps(
-          id,
-          title,
-          order_index
-        )
-      `)
-      .eq('session_id', sessionId)
-      .order('order_index');
-
-    // Fetch submissions
-    const { data: submissions } = await supabase
-      .from('submissions')
-      .select('step_id, content')
-      .eq('session_id', sessionId)
-      .eq('participant_id', participantId);
-
-    const submissionMap = new Map(
-      (submissions || []).map((s) => [s.step_id, s.content])
+    const promptPack = await buildPromptPackData(sessionId, participantId);
+    const pdfBuffer = await renderToBuffer(
+      React.createElement(PromptPackDocument, { data: promptPack }) as React.ReactElement
     );
 
-    // Build prompts array
-    const prompts: Array<{
-      moduleTitle: string;
-      stepTitle: string;
-      userContent: string;
-      finalPrompt: string;
-    }> = [];
-
-    for (const module of modules || []) {
-      for (const step of module.steps || []) {
-        const content = submissionMap.get(step.id);
-        if (content) {
-          prompts.push({
-            moduleTitle: module.title,
-            stepTitle: step.title,
-            userContent: '',
-            finalPrompt: content,
-          });
-        }
-      }
-    }
-
-    // Generate HTML
-    const html = generatePDFHTML({
-      participantName: participant.display_name,
-      workshopName: getJoinField(session.workshop_template, 'name') || 'Workshop',
-      organizationName: getJoinField(session.organization, 'name') || 'Organization',
-      completedAt: session.ended_at
-        ? new Date(session.ended_at).toLocaleDateString()
-        : new Date().toLocaleDateString(),
-      prompts,
-    });
-
-    // Return styled HTML document for download
-    return new NextResponse(html, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
-        'Content-Type': 'text/html',
-        'Content-Disposition': `attachment; filename="prompt-pack-${participantId.slice(0, 8)}.html"`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="prompt-pack-${participantId.slice(0, 8)}.pdf"`,
       },
     });
   } catch (error) {

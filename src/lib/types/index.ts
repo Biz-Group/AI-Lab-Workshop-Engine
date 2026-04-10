@@ -114,12 +114,41 @@ export interface PromptPackData {
   participantName: string;
   sessionDate: string;
   organizationName: string;
-  prompts: Array<{
-    stepTitle: string;
-    moduleTitle: string;
-    content: string;
-  }>;
+  workshopName: string;
+  entries: PromptPackEntry[];
   takeaways: string[];
+}
+
+export interface PromptPackEntry {
+  stepTitle: string;
+  moduleTitle: string;
+  stepInstructions: PromptPackStepInstructions;
+  promptBlocks: PromptPackPromptBlock[];
+  participantResponse: PromptPackParticipantResponse | null;
+}
+
+export interface PromptPackStepInstructions {
+  objective?: string;
+  actions?: string;
+  deliverable?: string;
+  checklist?: string;
+  tips?: string;
+  successSignal?: string;
+  reflection?: string;
+  nextUp?: string;
+}
+
+export interface PromptPackPromptBlock {
+  title: string;
+  content: string;
+  isCopyable: boolean;
+}
+
+export interface PromptPackParticipantResponse {
+  content: string;
+  imageUrl: string | null;
+  submittedAt: string | null;
+  updatedAt: string | null;
 }
 
 // ============================================================================
@@ -131,4 +160,21 @@ export interface SendPromptPackEmailParams {
   participantName: string;
   downloadUrl: string;
   organizationName: string;
+}
+
+export interface SessionParticipationExportRow {
+  participantName: string;
+  participantEmail: string;
+  joinedAt: string;
+  lastSeenAt: string;
+  currentStep: string;
+  stepsCompleted: number;
+  submissionsCount: number;
+  questionsAsked: number;
+  stuckSignals: number;
+  promptCopies: number;
+  sessionEndViewed: number;
+  promptPackDownloaded: number;
+  promptPackEmailed: number;
+  feedbackSubmitted: number;
 }

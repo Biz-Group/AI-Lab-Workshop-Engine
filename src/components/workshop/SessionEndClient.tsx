@@ -92,14 +92,14 @@ export function SessionEndClient({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `prompt-pack-${participantName.toLowerCase().replace(/\s+/g, '-')}.html`;
+      a.download = `prompt-pack-${participantName.toLowerCase().replace(/\s+/g, '-')}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
       setPdfDownloaded(true);
-      toast.success('Prompt Pack downloaded!');
+      toast.success('Prompt pack PDF downloaded!');
 
       // Log analytics
       await fetch('/api/analytics/event', {
@@ -112,7 +112,7 @@ export function SessionEndClient({
         }),
       });
     } catch {
-      toast.error('Failed to download PDF');
+      toast.error('Failed to download prompt pack PDF');
     } finally {
       setIsDownloading(false);
     }
