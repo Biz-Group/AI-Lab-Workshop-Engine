@@ -43,6 +43,7 @@ export async function buildPromptPackData(
     .select(`
       id,
       title,
+      objective,
       order_index,
       steps:session_snapshot_steps(
         id,

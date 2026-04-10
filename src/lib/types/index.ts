@@ -122,6 +122,7 @@ export interface PromptPackData {
 export interface PromptPackEntry {
   stepTitle: string;
   moduleTitle: string;
+  moduleObjective: string | null;
   stepInstructions: PromptPackStepInstructions;
   promptBlocks: PromptPackPromptBlock[];
   participantResponse: PromptPackParticipantResponse | null;
@@ -136,6 +137,7 @@ export interface PromptPackStepInstructions {
   successSignal?: string;
   reflection?: string;
   nextUp?: string;
+  rawInstructions?: string;
 }
 
 export interface PromptPackPromptBlock {

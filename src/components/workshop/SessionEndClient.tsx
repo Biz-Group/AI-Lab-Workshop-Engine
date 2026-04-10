@@ -85,7 +85,16 @@ export function SessionEndClient({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate PDF');
+        let message = 'Unable to export prompt pack PDF right now';
+        try {
+          const data = await response.json();
+          if (data?.error) {
+            message = data.error;
+          }
+        } catch {
+          // Ignore JSON parsing failures and use the default message.
+        }
+        throw new Error(message);
       }
 
       const blob = await response.blob();
@@ -111,8 +120,8 @@ export function SessionEndClient({
           eventType: 'pdf_downloaded',
         }),
       });
-    } catch {
-      toast.error('Failed to download prompt pack PDF');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to download prompt pack PDF');
     } finally {
       setIsDownloading(false);
     }

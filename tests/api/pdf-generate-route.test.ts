@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import type React from 'react';
 
 const verifySessionTokenMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
-const renderToBufferMock = vi.fn();
+const renderPromptPackPdfMock = vi.fn();
 
 vi.mock('@/lib/utils/session-token', () => ({
   verifySessionToken: verifySessionTokenMock,
@@ -14,15 +13,8 @@ vi.mock('@/lib/server/prompt-pack', () => ({
   buildPromptPackData: buildPromptPackDataMock,
 }));
 
-vi.mock('@react-pdf/renderer', () => ({
-  renderToBuffer: renderToBufferMock,
-  Document: ({ children }: { children: React.ReactNode }) => children,
-  Page: ({ children }: { children: React.ReactNode }) => children,
-  Text: ({ children }: { children: React.ReactNode }) => children,
-  View: ({ children }: { children: React.ReactNode }) => children,
-  StyleSheet: {
-    create: (styles: unknown) => styles,
-  },
+vi.mock('@/lib/server/render-pdf', () => ({
+  renderPromptPackPdf: renderPromptPackPdfMock,
 }));
 
 function createRequest() {
@@ -54,7 +46,7 @@ describe('POST /api/pdf/generate', () => {
       entries: [],
       takeaways: [],
     });
-    renderToBufferMock.mockResolvedValue(Buffer.from('pdf-data'));
+    renderPromptPackPdfMock.mockResolvedValue(Buffer.from('pdf-data'));
   });
 
   it('returns a real pdf attachment', async () => {
@@ -68,6 +60,18 @@ describe('POST /api/pdf/generate', () => {
       '11111111-1111-1111-1111-111111111111',
       '22222222-2222-2222-2222-222222222222'
     );
-    expect(renderToBufferMock).toHaveBeenCalledTimes(1);
+    expect(renderPromptPackPdfMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a 500 json error when pdf rendering fails', async () => {
+    renderPromptPackPdfMock.mockRejectedValueOnce(new Error('render failed'));
+
+    const { POST } = await import('@/app/api/pdf/generate/route');
+    const response = await POST(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.success).toBe(false);
+    expect(data.error).toContain('Unable to export prompt pack PDF');
   });
 });

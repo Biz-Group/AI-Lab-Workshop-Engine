@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer';
-import type { PromptPackData } from '@/lib/types';
+import type { PromptPackData, PromptPackEntry } from '@/lib/types';
 import { formatPromptPackInstructionSections } from '@/lib/utils/prompt-pack';
 
 const styles = StyleSheet.create({
@@ -40,18 +40,29 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     marginBottom: 3,
   },
+  chapterHeader: {
+    marginTop: 10,
+    marginBottom: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#2563EB',
+  },
+  chapterTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: '#1E3A8A',
+    marginBottom: 3,
+  },
+  chapterObjective: {
+    fontSize: 10,
+    color: '#4B5563',
+    fontStyle: 'italic',
+  },
   section: {
     marginBottom: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-  },
-  moduleLabel: {
-    fontSize: 9,
-    color: '#6B7280',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
   stepTitle: {
     fontSize: 15,
@@ -88,68 +99,95 @@ const styles = StyleSheet.create({
   },
 });
 
+function groupEntriesByModule(entries: PromptPackEntry[]) {
+  const groups: { moduleTitle: string; moduleObjective: string | null; entries: PromptPackEntry[] }[] = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (last && last.moduleTitle === entry.moduleTitle) {
+      last.entries.push(entry);
+    } else {
+      groups.push({ moduleTitle: entry.moduleTitle, moduleObjective: entry.moduleObjective, entries: [entry] });
+    }
+  }
+  return groups;
+}
+
 export function PromptPackDocument({ data }: { data: PromptPackData }) {
+  const moduleGroups = groupEntriesByModule(data.entries);
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.cover}>
           <Text style={styles.eyebrow}>Workshop Prompt Pack</Text>
-          <Text style={styles.title}>{data.workshopName}</Text>
-          <Text style={styles.subtitle}>Prepared for {data.participantName}</Text>
-          <Text style={styles.subtitle}>{data.organizationName}</Text>
-          <Text style={styles.subtitle}>Completed {data.sessionDate}</Text>
+          <Text style={styles.title}>{String(data.workshopName)}</Text>
+          <Text style={styles.subtitle}>Prepared for {String(data.participantName)}</Text>
+          <Text style={styles.subtitle}>{String(data.organizationName)}</Text>
+          <Text style={styles.subtitle}>Completed {String(data.sessionDate)}</Text>
         </View>
 
-        {data.entries.map((entry, index) => {
-          const instructionSections = formatPromptPackInstructionSections(entry.stepInstructions);
-
-          return (
-            <View key={`${entry.moduleTitle}-${entry.stepTitle}-${index}`} style={styles.section} wrap={false}>
-              <Text style={styles.moduleLabel}>{entry.moduleTitle}</Text>
-              <Text style={styles.stepTitle}>{entry.stepTitle}</Text>
-
-              {instructionSections.length > 0 && (
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Attendee Prompt</Text>
-                  {instructionSections.map((section) => (
-                    <View key={section.label} style={{ marginBottom: 5 }}>
-                      <Text style={styles.promptBlockTitle}>{section.label}</Text>
-                      <Text style={styles.body}>{section.content}</Text>
-                    </View>
-                  ))}
-                </View>
+        {moduleGroups.map((group, groupIndex) => (
+          <View key={`module-${groupIndex}`}>
+            <View style={styles.chapterHeader}>
+              <Text style={styles.chapterTitle}>
+                Chapter {groupIndex + 1}: {String(group.moduleTitle)}
+              </Text>
+              {group.moduleObjective && (
+                <Text style={styles.chapterObjective}>{String(group.moduleObjective)}</Text>
               )}
-
-              {entry.promptBlocks.length > 0 && (
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Prompt Blocks</Text>
-                  {entry.promptBlocks.map((block, blockIndex) => (
-                    <View key={`${block.title}-${blockIndex}`} style={{ marginBottom: blockIndex === entry.promptBlocks.length - 1 ? 0 : 6 }}>
-                      <Text style={styles.promptBlockTitle}>{block.title}</Text>
-                      <Text style={styles.body}>{block.content}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              <View style={[styles.card, styles.responseCard]}>
-                <Text style={styles.cardTitle}>Participant Response</Text>
-                {entry.participantResponse?.content ? (
-                  <Text style={styles.body}>{entry.participantResponse.content}</Text>
-                ) : (
-                  <Text style={styles.muted}>
-                    No saved text response for this step. The workshop prompt is still included for reuse later.
-                  </Text>
-                )}
-                {entry.participantResponse?.imageUrl && (
-                  <Text style={[styles.muted, { marginTop: 5 }]}>
-                    Image submission captured during session: {entry.participantResponse.imageUrl}
-                  </Text>
-                )}
-              </View>
             </View>
-          );
-        })}
+
+            {group.entries.map((entry, index) => {
+              const instructionSections = formatPromptPackInstructionSections(entry.stepInstructions);
+
+              return (
+                <View key={`${entry.moduleTitle}-${entry.stepTitle}-${index}`} style={styles.section} wrap={false}>
+                  <Text style={styles.stepTitle}>{String(entry.stepTitle)}</Text>
+
+                  {instructionSections.length > 0 && (
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>Activity Instructions</Text>
+                      {instructionSections.map((section) => (
+                        <View key={section.label} style={{ marginBottom: 5 }}>
+                          <Text style={styles.promptBlockTitle}>{String(section.label)}</Text>
+                          <Text style={styles.body}>{String(section.content)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {entry.promptBlocks.length > 0 && (
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>Prompt Blocks</Text>
+                      {entry.promptBlocks.map((block, blockIndex) => (
+                        <View key={`${block.title}-${blockIndex}`} style={{ marginBottom: blockIndex === entry.promptBlocks.length - 1 ? 0 : 6 }}>
+                          <Text style={styles.promptBlockTitle}>{String(block.title)}</Text>
+                          <Text style={styles.body}>{String(block.content)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={[styles.card, styles.responseCard]}>
+                    <Text style={styles.cardTitle}>Your Response</Text>
+                    {entry.participantResponse?.content ? (
+                      <Text style={styles.body}>{String(entry.participantResponse.content)}</Text>
+                    ) : (
+                      <Text style={styles.muted}>
+                        No saved text response for this step. The instructions and prompts above are included for reuse later.
+                      </Text>
+                    )}
+                    {entry.participantResponse?.imageUrl && (
+                      <Text style={[styles.muted, { marginTop: 5 }]}>
+                        Image submission captured during session: {String(entry.participantResponse.imageUrl)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ))}
       </Page>
     </Document>
   );

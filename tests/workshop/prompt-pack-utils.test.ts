@@ -39,7 +39,31 @@ describe('prompt-pack utils', () => {
 
     expect(pack.entries).toHaveLength(1);
     expect(pack.entries[0].stepInstructions.objective).toBe('Clarify audience');
+    expect(pack.entries[0].stepInstructions.actions).toBe('Describe the audience');
     expect(pack.entries[0].promptBlocks[0].title).toBe('Starter Prompt');
     expect(pack.entries[0].participantResponse).toBeNull();
+  });
+
+  it('maps plain instruction markdown into the What To Do actions field', () => {
+    const entries = mapPromptPackEntries(
+      [
+        {
+          title: 'Discovery',
+          steps: [
+            {
+              id: 'step-2',
+              title: 'Freeform Activity',
+              instruction_markdown: 'Write three concrete ideas for your audience and pick the strongest one.',
+              prompt_blocks: [],
+            },
+          ],
+        },
+      ],
+      []
+    );
+
+    expect(entries[0].stepInstructions.actions).toBe(
+      'Write three concrete ideas for your audience and pick the strongest one.'
+    );
   });
 });

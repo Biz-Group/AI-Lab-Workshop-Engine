@@ -121,5 +121,11 @@ describe('POST /api/email/prompt-pack', () => {
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]).toMatchObject({
       method: 'POST',
     });
+    const requestBody = JSON.parse(
+      String((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]?.body)
+    );
+    expect(requestBody.html).toContain('Activity Instructions');
+    expect(requestBody.html).toContain('What To Do');
+    expect(requestBody.html).toContain('Describe your audience');
   });
 });

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionEndClient } from '@/components/workshop/SessionEndClient';
+import toast from 'react-hot-toast';
 
 const createObjectURLMock = vi.fn(() => 'blob:prompt-pack');
 const revokeObjectURLMock = vi.fn();
@@ -95,5 +96,41 @@ describe('SessionEndClient', () => {
     );
     expect(appendChildMock).toHaveBeenCalled();
     expect(removeChildMock).toHaveBeenCalled();
+  });
+
+  it('surfaces the server export error when pdf generation fails', async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/pdf/generate')) {
+        return {
+          ok: false,
+          json: async () => ({ error: 'Unable to export prompt pack PDF right now' }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response;
+    }) as typeof fetch;
+
+    render(
+      <SessionEndClient
+        sessionId="11111111-1111-1111-1111-111111111111"
+        organizationName="Biz Group"
+        participantId="22222222-2222-2222-2222-222222222222"
+        participantName="Alex Example"
+        participantEmail="alex@example.com"
+        hasEmailConsent
+        feedbackSubmitted
+        submissions={[]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Unable to export prompt pack PDF right now');
+    });
   });
 });

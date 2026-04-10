@@ -53,7 +53,7 @@ export function buildPromptPackDataFromSource(source: PromptPackSourceData): Pro
     sessionDate: source.sessionDate,
     organizationName: source.organizationName,
     workshopName: source.workshopName,
-    entries: source.entries.filter(hasPromptPackContent),
+    entries: source.entries,
     takeaways: source.takeaways ?? [],
   };
 }
@@ -85,6 +85,7 @@ export function mapPromptPackEntries(
   return modules.flatMap((module) => {
     const moduleRecord = asRecord(module);
     const moduleTitle = readString(moduleRecord, 'title') ?? 'Untitled Module';
+    const moduleObjective = readString(moduleRecord, 'objective');
 
     return asArray<unknown>(moduleRecord?.steps).map((step) => {
       const stepRecord = asRecord(step);
@@ -107,10 +108,17 @@ export function mapPromptPackEntries(
         .filter((block): block is PromptPackPromptBlock => Boolean(block));
 
       const instructionMarkdown = readString(stepRecord, 'instruction_markdown') ?? '';
-      const stepInstructions = parseStepInstructions(instructionMarkdown) satisfies PromptPackStepInstructions;
+      const parsed = parseStepInstructions(instructionMarkdown);
+      const stepInstructions: PromptPackStepInstructions = {
+        ...parsed,
+        rawInstructions: Object.keys(parsed).length === 0 && instructionMarkdown.trim()
+          ? instructionMarkdown.trim()
+          : undefined,
+      };
 
       return {
         moduleTitle,
+        moduleObjective,
         stepTitle: readString(stepRecord, 'title') ?? 'Untitled Step',
         stepInstructions,
         promptBlocks,
@@ -144,10 +152,17 @@ export function formatPromptPackInstructionSections(sections: PromptPackStepInst
     ['nextUp', 'Next Up'],
   ];
 
-  return orderedSections.flatMap(([key, label]) => {
+  const result = orderedSections.flatMap(([key, label]) => {
     const content = sections[key];
     return content ? [{ label, content }] : [];
   });
+
+  // If no structured sections were found, include the raw instruction text as fallback
+  if (result.length === 0 && sections.rawInstructions) {
+    result.push({ label: 'Instructions', content: sections.rawInstructions });
+  }
+
+  return result;
 }
 
 export function readJoinedName(value: unknown, fallback: string): string {
