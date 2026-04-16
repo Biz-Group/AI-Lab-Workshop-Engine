@@ -5,6 +5,7 @@ import { buildPromptPackData } from '@/lib/server/prompt-pack';
 import { renderPromptPackPdf } from '@/lib/server/render-pdf';
 
 export const runtime = 'nodejs';
+export const maxDuration = 10;
 
 const generatePDFSchema = z.object({
   sessionId: z.string().uuid(),

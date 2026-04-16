@@ -21,6 +21,11 @@ import { formatPromptPackInstructionSections } from '@/lib/utils/prompt-pack';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
+// Static import so Next.js file tracer includes the package in the serverless
+// function bundle on Vercel.  Not used at runtime — createRequire below is the
+// actual resolution path (avoids the dual-React $$typeof mismatch).
+import '@react-pdf/renderer';
+
 // Obtain a require() that resolves from the project root's node_modules,
 // NOT from the bundler's module graph (which maps 'react' → React 19 canary).
 const nodeRequire = createRequire(join(process.cwd(), 'package.json'));

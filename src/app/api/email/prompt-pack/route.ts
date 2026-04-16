@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { verifySessionToken } from '@/lib/utils/session-token';
 import { buildPromptPackData } from '@/lib/server/prompt-pack';
+
+export const maxDuration = 10;
 import {
   escapeHtml,
   formatPromptPackInstructionSections,
