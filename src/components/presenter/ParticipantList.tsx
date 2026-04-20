@@ -237,11 +237,27 @@ export function ParticipantList({
   };
 
   // Dismiss stuck signal
-  const dismissStuck = (participantId: string) => {
+  const dismissStuck = async (participantId: string) => {
+    // Immediately update UI
     dismissedStuckRef.current.add(participantId);
     setParticipants(prev =>
       prev.map(p => p.id === participantId ? { ...p, is_stuck: false } : p)
     );
+
+    // Persist dismissal by deleting recent stuck_signal events
+    try {
+      const res = await fetch(`/api/admin/sessions/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss_stuck', participantId }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        console.error('Failed to persist stuck dismissal:', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to persist stuck dismissal:', err);
+    }
   };
 
   return (

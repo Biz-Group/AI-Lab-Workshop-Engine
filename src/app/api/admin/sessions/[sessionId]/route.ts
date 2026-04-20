@@ -282,3 +282,91 @@ export async function DELETE(
     );
   }
 }
+
+// Dismiss a participant's stuck signal
+const dismissStuckSchema = z.object({
+  action: z.literal('dismiss_stuck'),
+  participantId: z.string().uuid(),
+});
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { sessionId } = await params;
+    const body = await request.json();
+    const validation = dismissStuckSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error.errors[0].message },
+        { status: 400 }
+      );
+    }
+
+    const serviceClient = await createServiceClient();
+
+    const { data: facilitator } = await serviceClient
+      .from('facilitator_users')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!facilitator) {
+      return NextResponse.json(
+        { success: false, error: 'Facilitator not found' },
+        { status: 403 }
+      );
+    }
+
+    const { data: session, error: sessionError } = await serviceClient
+      .from('sessions')
+      .select('id, organization_id')
+      .eq('id', sessionId)
+      .eq('organization_id', facilitator.organization_id)
+      .single();
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { success: false, error: 'Session not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Delete recent stuck_signal events for this participant (within 5-min window)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { error: deleteError } = await serviceClient
+      .from('analytics_events')
+      .delete()
+      .eq('session_id', sessionId)
+      .eq('participant_id', validation.data.participantId)
+      .eq('event_type', 'stuck_signal')
+      .gte('created_at', fiveMinutesAgo);
+
+    if (deleteError) {
+      console.error('Dismiss stuck error:', deleteError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to dismiss stuck signal' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Session POST error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

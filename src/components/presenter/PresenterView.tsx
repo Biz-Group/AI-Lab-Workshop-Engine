@@ -126,7 +126,8 @@ export function PresenterView({
 
   const fetchParticipationAnalytics = useCallback(async () => {
     const supabase = createClient();
-    const [participantsResult, submissionsResult, analyticsResult, questionsResult] = await Promise.all([
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const [participantsResult, submissionsResult, analyticsResult, questionsResult, recentStuckResult] = await Promise.all([
       supabase
         .from('participants')
         .select('id, display_name, email, joined_at, last_seen_at, current_step_id, feedback_submitted')
@@ -144,6 +145,12 @@ export function PresenterView({
         .from('session_questions')
         .select('participant_id')
         .eq('session_id', session.id),
+      supabase
+        .from('analytics_events')
+        .select('participant_id')
+        .eq('session_id', session.id)
+        .eq('event_type', 'stuck_signal')
+        .gte('created_at', fiveMinutesAgo),
     ]);
 
     const { rows, summary } = buildSessionParticipationRows({
@@ -154,8 +161,12 @@ export function PresenterView({
       stepTitlesById,
     });
 
+    const activeStuckParticipants = new Set(
+      (recentStuckResult.data ?? []).map(s => s.participant_id)
+    );
+
     setParticipantCount(summary.totalParticipants);
-    setStuckCount(summary.totalStuckSignals);
+    setStuckCount(activeStuckParticipants.size);
     setParticipationSummary(summary);
 
     return rows;
@@ -559,7 +570,7 @@ export function PresenterView({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-5 h-5 text-green-400" />
-                    <span className="text-gray-300">Completed</span>
+                    <span className="text-gray-300">Step Completed</span>
                   </div>
                   <span className="text-xl font-bold">{completedCount}/{participantCount}</span>
                 </div>
@@ -582,7 +593,7 @@ export function PresenterView({
                   <span className="font-semibold">{participationSummary.totalQuestions}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-300">Stuck signals</span>
+                  <span className="text-gray-300">Total stuck signals</span>
                   <span className="font-semibold">{participationSummary.totalStuckSignals}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">

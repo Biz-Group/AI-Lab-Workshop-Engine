@@ -17,6 +17,11 @@ vi.mock('@/lib/server/prompt-pack', () => ({
   buildPromptPackData: buildPromptPackDataMock,
 }));
 
+const sendMailMock = vi.fn(async () => ({ messageId: 'msg-1' }));
+vi.mock('nodemailer', () => ({
+  createTransport: vi.fn(() => ({ sendMail: sendMailMock })),
+}));
+
 function createRequest() {
   return new NextRequest('http://localhost/api/email/prompt-pack', {
     method: 'POST',
@@ -35,7 +40,9 @@ function createRequest() {
 describe('POST /api/email/prompt-pack', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env.RESEND_API_KEY = 'resend-key';
+    process.env.GMAIL_USER = 'test@gmail.com';
+    process.env.GMAIL_APP_PASSWORD = 'app-password';
+    sendMailMock.mockResolvedValue({ messageId: 'msg-1' });
 
     verifySessionTokenMock.mockResolvedValue({
       session_id: '11111111-1111-1111-1111-111111111111',
@@ -99,11 +106,6 @@ describe('POST /api/email/prompt-pack', () => {
       ],
       takeaways: [],
     });
-
-    global.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ id: 'email-1' }),
-    })) as unknown as typeof fetch;
   });
 
   it('reuses the shared prompt-pack builder for email content', async () => {
@@ -117,15 +119,11 @@ describe('POST /api/email/prompt-pack', () => {
       '11111111-1111-1111-1111-111111111111',
       '22222222-2222-2222-2222-222222222222'
     );
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]).toMatchObject({
-      method: 'POST',
-    });
-    const requestBody = JSON.parse(
-      String((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]?.body)
-    );
-    expect(requestBody.html).toContain('Activity Instructions');
-    expect(requestBody.html).toContain('What To Do');
-    expect(requestBody.html).toContain('Describe your audience');
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const mailOptions = sendMailMock.mock.calls[0][0];
+    expect(mailOptions.to).toBe('alex@example.com');
+    expect(mailOptions.html).toContain('Activity Instructions');
+    expect(mailOptions.html).toContain('What To Do');
+    expect(mailOptions.html).toContain('Describe your audience');
   });
 });

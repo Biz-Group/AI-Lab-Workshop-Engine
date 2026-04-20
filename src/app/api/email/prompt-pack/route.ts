@@ -231,40 +231,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (!resendApiKey) {
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    if (!gmailUser || !gmailAppPassword) {
       console.log('Email would be sent to:', email, 'for participant:', participantId);
       return NextResponse.json({
         success: true,
-        message: 'Email queued (Resend not configured - development mode)',
+        message: 'Email queued (Gmail SMTP not configured - development mode)',
       });
     }
 
     const promptPack = await buildPromptPackData(sessionId, participantId);
     const html = renderPromptPackEmailHtml(participant.display_name, promptPack);
 
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${resendApiKey}`,
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: gmailUser,
+        pass: gmailAppPassword,
       },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'Workshop Runner <noreply@workshop.run>',
-        to: [email],
-        subject: `Your Prompt Pack from ${promptPack.workshopName}`,
-        html,
-      }),
     });
 
-    if (!emailResponse.ok) {
-      const errorData = await emailResponse.json();
-      console.error('Resend API error:', errorData);
-      return NextResponse.json(
-        { success: false, error: 'Failed to send email' },
-        { status: 500 }
-      );
-    }
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || gmailUser,
+      to: email,
+      subject: `Your Prompt Pack from ${promptPack.workshopName}`,
+      html,
+    });
 
     return NextResponse.json({
       success: true,
