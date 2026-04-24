@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { verifySessionToken } from '@/lib/utils/session-token';
+import { requireParticipantSession } from '@/lib/server/participant-session';
 import { buildPromptPackData } from '@/lib/server/prompt-pack';
 import { renderPromptPackPdf } from '@/lib/server/render-pdf';
 
@@ -14,32 +14,6 @@ const generatePDFSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    let token =
-      request.cookies.get('workshop_session_token')?.value ||
-      request.cookies.get('session_token')?.value;
-
-    if (!token) {
-      const authHeader = request.headers.get('Authorization');
-      if (authHeader?.startsWith('Bearer ')) {
-        token = authHeader.slice(7);
-      }
-    }
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Missing session token' },
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifySessionToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid or expired token' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const validation = generatePDFSchema.safeParse(body);
     if (!validation.success) {
@@ -50,17 +24,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { sessionId, participantId } = validation.data;
-
-    if (payload.session_id !== sessionId || payload.participant_id !== participantId) {
-      return NextResponse.json(
-        { success: false, error: 'Token mismatch' },
-        { status: 403 }
-      );
+    const auth = await requireParticipantSession(request, { participantId, sessionId });
+    if (auth.response) {
+      return auth.response;
     }
 
     let promptPack;
     try {
-      promptPack = await buildPromptPackData(sessionId, participantId);
+      promptPack = await buildPromptPackData(
+        auth.payload.session_id,
+        auth.payload.participant_id
+      );
     } catch (error) {
       console.error('Prompt pack data build error:', error);
       throw error;
@@ -77,7 +51,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="prompt-pack-${participantId.slice(0, 8)}.pdf"`,
+        'Content-Disposition': `attachment; filename="prompt-pack-${auth.payload.participant_id.slice(0, 8)}.pdf"`,
       },
     });
   } catch (error) {

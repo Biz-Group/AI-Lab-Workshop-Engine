@@ -2,22 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const createServiceClientMock = vi.fn();
-const verifySessionTokenMock = vi.fn();
+const requireParticipantSessionMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: createServiceClientMock,
 }));
 
-vi.mock('@/lib/utils/session-token', () => ({
-  verifySessionToken: verifySessionTokenMock,
+vi.mock('@/lib/server/participant-session', () => ({
+  requireParticipantSession: requireParticipantSessionMock,
 }));
 
 vi.mock('@/lib/server/prompt-pack', () => ({
   buildPromptPackData: buildPromptPackDataMock,
 }));
 
-const sendMailMock = vi.fn(async () => ({ messageId: 'msg-1' }));
+const sendMailMock = vi.fn(
+  async (_options: { to: string; html: string }) => ({ messageId: 'msg-1' })
+);
 vi.mock('nodemailer', () => ({
   createTransport: vi.fn(() => ({ sendMail: sendMailMock })),
 }));
@@ -44,9 +46,15 @@ describe('POST /api/email/prompt-pack', () => {
     process.env.GMAIL_APP_PASSWORD = 'app-password';
     sendMailMock.mockResolvedValue({ messageId: 'msg-1' });
 
-    verifySessionTokenMock.mockResolvedValue({
-      session_id: '11111111-1111-1111-1111-111111111111',
-      participant_id: '22222222-2222-2222-2222-222222222222',
+    requireParticipantSessionMock.mockResolvedValue({
+      payload: {
+        session_id: '11111111-1111-1111-1111-111111111111',
+        participant_id: '22222222-2222-2222-2222-222222222222',
+        display_name: 'Alex',
+        exp: 1,
+        iat: 1,
+      },
+      response: null,
     });
 
     const participantBuilder = {
@@ -65,7 +73,7 @@ describe('POST /api/email/prompt-pack', () => {
 
     const participantUpdateBuilder = {
       update: vi.fn(() => participantUpdateBuilder),
-      eq: vi.fn(async () => ({ error: null })),
+      eq: vi.fn(() => participantUpdateBuilder),
     };
 
     const sessionBuilder = {
@@ -120,7 +128,7 @@ describe('POST /api/email/prompt-pack', () => {
       '22222222-2222-2222-2222-222222222222'
     );
     expect(sendMailMock).toHaveBeenCalledTimes(1);
-    const mailOptions = sendMailMock.mock.calls[0][0];
+    const mailOptions = sendMailMock.mock.calls[0]![0];
     expect(mailOptions.to).toBe('alex@example.com');
     expect(mailOptions.html).toContain('Activity Instructions');
     expect(mailOptions.html).toContain('What To Do');

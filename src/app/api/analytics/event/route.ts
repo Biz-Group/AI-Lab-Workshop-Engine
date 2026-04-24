@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireParticipantSession } from '@/lib/server/participant-session';
 import { checkRateLimit } from '@/lib/utils/rate-limit';
 import { z } from 'zod';
 
@@ -30,9 +31,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const validatedData = eventSchema.parse(body);
+    const auth = await requireParticipantSession(request, {
+      participantId: validatedData.participantId,
+      sessionId: validatedData.sessionId,
+    });
+
+    if (auth.response) {
+      return NextResponse.json({ success: true });
+    }
+
+    const participantId = auth.payload.participant_id;
+    const sessionId = auth.payload.session_id;
 
     // Rate limit: 60 events per minute per participant (analytics fires frequently)
-    const rl = checkRateLimit(`evt:${validatedData.participantId}`, 60, 60_000);
+    const rl = checkRateLimit(`evt:${participantId}`, 60, 60_000);
     if (!rl.allowed) return NextResponse.json({ success: true }); // silent drop for analytics
 
     const supabase = await createServiceClient();
@@ -40,8 +52,8 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase
       .from('analytics_events')
       .insert({
-        participant_id: validatedData.participantId,
-        session_id: validatedData.sessionId,
+        participant_id: participantId,
+        session_id: sessionId,
         event_type: validatedData.eventType,
         payload: validatedData.payload || null,
       });
@@ -55,7 +67,8 @@ export async function POST(request: NextRequest) {
     await supabase
       .from('participants')
       .update({ last_seen_at: new Date().toISOString() })
-      .eq('id', validatedData.participantId);
+      .eq('id', participantId)
+      .eq('session_id', sessionId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

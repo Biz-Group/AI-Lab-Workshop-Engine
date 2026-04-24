@@ -28,9 +28,11 @@ import {
 import { NarrativeProgressMap } from './NarrativeProgressMap';
 import { StepNarrativeSections } from './StepNarrativeSections';
 import { ChapterCelebration, useChapterCelebration } from './ChapterCelebration';
-import { createClient } from '@/lib/supabase';
 import { parseStepInstructions } from '@/lib/utils';
 import toast from 'react-hot-toast';
+
+const SESSION_STATE_POLL_INTERVAL_MS = 5_000;
+const QUESTIONS_POLL_INTERVAL_MS = 5_000;
 
 interface Module {
   id: string;
@@ -143,7 +145,6 @@ export function WorkshopRunner({
   const [isMobileProgressOpen, setIsMobileProgressOpen] = useState(false);
   const [recentSubmissionStepId, setRecentSubmissionStepId] = useState<string | null>(null);
   const qaFirstFocusRef = useRef<HTMLInputElement>(null);
-  const prevStepIndexRef = useRef(0);
 
   // Flatten steps for navigation (memoized — only recalculates when modules change)
   const allSteps = useMemo(() => modules.flatMap((module, moduleIndex) => 
@@ -169,7 +170,29 @@ export function WorkshopRunner({
   // No longer sync with facilitator's current step - allow free navigation
   // useEffect removed to prevent navigation reset
 
-  // Fetch questions — defined before realtime so it can be referenced in subscriptions
+  const fetchSessionState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sessions/state?sessionId=${initialSession.id}`, {
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (!data.success) return;
+
+      setSession((prev) => ({
+        ...prev,
+        status: data.session.status,
+        currentStepId: data.session.currentStepId,
+        timerEndAt: data.session.timerEndAt,
+      }));
+
+      if (data.session.status === 'ended') {
+        router.push(`/s/${initialSession.id}/end`);
+      }
+    } catch {
+      // Silent retry via polling.
+    }
+  }, [initialSession.id, router]);
+
   const fetchQuestions = useCallback(async () => {
     try {
       const res = await fetch(`/api/questions?sessionId=${initialSession.id}`);
@@ -178,92 +201,23 @@ export function WorkshopRunner({
     } catch { /* silent */ }
   }, [initialSession.id]);
 
-  // Initial question fetch
   useEffect(() => {
-    fetchQuestions();
+    void fetchSessionState();
+    const intervalId = window.setInterval(() => {
+      void fetchSessionState();
+    }, SESSION_STATE_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchSessionState]);
+
+  useEffect(() => {
+    void fetchQuestions();
+    const intervalId = window.setInterval(() => {
+      void fetchQuestions();
+    }, QUESTIONS_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
   }, [fetchQuestions]);
-
-  // Subscribe to session realtime updates
-  useEffect(() => {
-    const supabase = createClient();
-    
-    const sessionChannel = supabase
-      .channel(`session:${initialSession.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'sessions',
-          filter: `id=eq.${initialSession.id}`,
-        },
-        (payload) => {
-          const updated = payload.new as {
-            status: string;
-            current_step_id: string | null;
-            timer_end_at: string | null;
-          };
-          
-          setSession(prev => ({
-            ...prev,
-            status: updated.status,
-            currentStepId: updated.current_step_id,
-            timerEndAt: updated.timer_end_at,
-          }));
-
-          if (updated.status === 'ended') {
-            router.push(`/s/${initialSession.id}/end`);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(sessionChannel);
-    };
-  }, [initialSession.id, router]);
-
-  // Subscribe to broadcast channel for timer/session events from presenter
-  useEffect(() => {
-    const supabase = createClient();
-
-    const broadcastChannel = supabase
-      .channel(`workshop-broadcast:${initialSession.id}`)
-      .on('broadcast', { event: 'timer_update' }, (payload) => {
-        const timerEndAt = (payload.payload as { timer_end_at: string | null }).timer_end_at;
-        setSession(prev => ({ ...prev, timerEndAt }));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(broadcastChannel);
-    };
-  }, [initialSession.id]);
-
-  // Subscribe to Q&A realtime updates (separate effect so fetchQuestions is always current)
-  useEffect(() => {
-    const supabase = createClient();
-
-    const qaChannel = supabase
-      .channel(`questions:${initialSession.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_questions',
-          filter: `session_id=eq.${initialSession.id}`,
-        },
-        () => {
-          fetchQuestions();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(qaChannel);
-    };
-  }, [initialSession.id, fetchQuestions]);
 
   // Ask a question
   const handleAskQuestion = async () => {
@@ -276,7 +230,6 @@ export function WorkshopRunner({
         body: JSON.stringify({
           sessionId: initialSession.id,
           participantId: participant.id,
-          participantName: participant.displayName,
           questionText: questionText.trim(),
         }),
       });
@@ -326,7 +279,6 @@ export function WorkshopRunner({
     setIsStepTransitioning(true);
     setRecentSubmissionStepId(null);
     setTimeout(() => {
-      prevStepIndexRef.current = index;
       setCurrentStepIndex(index);
       logEvent('step_viewed', { step_id: allSteps[index]?.id });
       setIsStepTransitioning(false);
@@ -434,9 +386,6 @@ export function WorkshopRunner({
 
         const uploadRes = await fetch('/api/submissions/upload', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${document.cookie.split('workshop_session_token=')[1]?.split(';')[0] || ''}`,
-          },
           body: formData,
         });
 

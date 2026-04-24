@@ -1,25 +1,100 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
+import { readParticipantSession, requireParticipantSession } from '@/lib/server/participant-session';
+
+const sessionQuestionsSchema = z.object({
+  sessionId: z.string().uuid(),
+});
 
 const createQuestionSchema = z.object({
   sessionId: z.string().uuid(),
   participantId: z.string().uuid(),
-  participantName: z.string().min(1).max(100),
   questionText: z.string().min(1).max(1000),
 });
 
+async function authorizeFacilitatorSessionAccess(sessionId: string) {
+  const supabase = await createServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return {
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      ),
+    };
+  }
+
+  const serviceClient = await createServiceClient();
+  const [{ data: facilitator }, { data: session }] = await Promise.all([
+    serviceClient
+      .from('facilitator_users')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .single(),
+    serviceClient
+      .from('sessions')
+      .select('id, organization_id')
+      .eq('id', sessionId)
+      .single(),
+  ]);
+
+  if (!facilitator) {
+    return {
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Facilitator not found' },
+        { status: 403 }
+      ),
+    };
+  }
+
+  if (!session || session.organization_id !== facilitator.organization_id) {
+    return {
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Session not found or access denied' },
+        { status: 404 }
+      ),
+    };
+  }
+
+  return { serviceClient, response: null };
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = request.nextUrl.searchParams.get('sessionId');
-    if (!sessionId) {
+    const validation = sessionQuestionsSchema.safeParse({
+      sessionId: request.nextUrl.searchParams.get('sessionId'),
+    });
+
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'sessionId is required' },
+        { success: false, error: 'Valid sessionId is required' },
         { status: 400 }
       );
     }
 
-    const serviceClient = await createServiceClient();
+    const { sessionId } = validation.data;
+    let serviceClient = await createServiceClient();
+
+    const participantSession = await readParticipantSession(request);
+    if (participantSession) {
+      if (participantSession.session_id !== sessionId) {
+        return NextResponse.json(
+          { success: false, error: 'Token mismatch' },
+          { status: 403 }
+        );
+      }
+    } else {
+      const facilitatorAccess = await authorizeFacilitatorSessionAccess(sessionId);
+      if (facilitatorAccess.response) {
+        return facilitatorAccess.response;
+      }
+      serviceClient = facilitatorAccess.serviceClient!;
+    }
+
     const { data: questions, error } = await serviceClient
       .from('session_questions')
       .select('id, session_id, participant_id, participant_name, question_text, answer_text, is_answered, created_at, answered_at')
@@ -63,14 +138,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { sessionId, participantId, participantName, questionText } = validation.data;
+    const { sessionId, participantId, questionText } = validation.data;
+    const auth = await requireParticipantSession(request, { participantId, sessionId });
+    if (auth.response) {
+      return auth.response;
+    }
 
     const serviceClient = await createServiceClient();
-
-    // Verify participant belongs to the session
     const { data: participant } = await serviceClient
       .from('participants')
-      .select('id')
+      .select('id, display_name')
       .eq('id', participantId)
       .eq('session_id', sessionId)
       .single();
@@ -87,7 +164,7 @@ export async function POST(request: NextRequest) {
       .insert({
         session_id: sessionId,
         participant_id: participantId,
-        participant_name: participantName,
+        participant_name: participant.display_name,
         question_text: questionText,
       })
       .select()

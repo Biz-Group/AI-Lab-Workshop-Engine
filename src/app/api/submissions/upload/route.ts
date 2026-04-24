@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { verifySessionToken } from '@/lib/utils/session-token';
+import { requireParticipantSession } from '@/lib/server/participant-session';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -10,8 +10,8 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const MAGIC_BYTES: Record<string, number[][]> = {
   'image/png': [[0x89, 0x50, 0x4E, 0x47]],
   'image/jpeg': [[0xFF, 0xD8, 0xFF]],
-  'image/gif': [[0x47, 0x49, 0x46, 0x38]], // GIF8
-  'image/webp': [[0x52, 0x49, 0x46, 0x46]], // RIFF
+  'image/gif': [[0x47, 0x49, 0x46, 0x38]],
+  'image/webp': [[0x52, 0x49, 0x46, 0x46]],
 };
 
 function verifyMagicBytes(buffer: ArrayBuffer, declaredType: string): boolean {
@@ -19,21 +19,13 @@ function verifyMagicBytes(buffer: ArrayBuffer, declaredType: string): boolean {
   const signatures = MAGIC_BYTES[declaredType];
   if (!signatures) return false;
 
-  return signatures.some(sig =>
-    sig.every((byte, i) => bytes[i] === byte)
+  return signatures.some((signature) =>
+    signature.every((byte, index) => bytes[index] === byte)
   );
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify session token
-    const authHeader = request.headers.get('Authorization');
-    let tokenPayload = null;
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      tokenPayload = await verifySessionToken(token);
-    }
-
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const participantId = formData.get('participantId') as string | null;
@@ -47,18 +39,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate token matches request
-    if (tokenPayload) {
-      if (tokenPayload.participant_id !== participantId ||
-          tokenPayload.session_id !== sessionId) {
-        return NextResponse.json(
-          { success: false, error: 'Token does not match request' },
-          { status: 403 }
-        );
-      }
+    const auth = await requireParticipantSession(request, { participantId, sessionId });
+    if (auth.response) {
+      return auth.response;
     }
 
-    // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
         { success: false, error: 'Invalid file type. Allowed: PNG, JPEG, GIF, WebP' },
@@ -66,7 +51,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file size (server-side enforcement)
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
         { success: false, error: 'File too large. Maximum size is 5MB' },
@@ -74,22 +58,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limit: 10 uploads per minute per participant
-    if (participantId) {
-      const rl = checkRateLimit(`upload:${participantId}`, 10, 60_000);
-      if (!rl.allowed) return rateLimitResponse(rl.resetAt);
-    }
-
-    // Determine file extension from MIME type
-    const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
-    const storagePath = `${sessionId}/${participantId}/${stepId}.${ext}`;
+    const rl = checkRateLimit(`upload:${participantId}`, 10, 60_000);
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
     const supabase = await createServiceClient();
+    const [{ data: participant }, { data: step }] = await Promise.all([
+      supabase
+        .from('participants')
+        .select('id')
+        .eq('id', participantId)
+        .eq('session_id', sessionId)
+        .single(),
+      supabase
+        .from('session_snapshot_steps')
+        .select('id')
+        .eq('id', stepId)
+        .eq('session_id', sessionId)
+        .single(),
+    ]);
 
-    // Convert File to ArrayBuffer then to Buffer for upload
+    if (!participant) {
+      return NextResponse.json(
+        { success: false, error: 'Participant not found in session' },
+        { status: 403 }
+      );
+    }
+
+    if (!step) {
+      return NextResponse.json(
+        { success: false, error: 'Step not found in session' },
+        { status: 400 }
+      );
+    }
+
     const arrayBuffer = await file.arrayBuffer();
-
-    // Verify magic bytes match the declared MIME type
     if (!verifyMagicBytes(arrayBuffer, file.type)) {
       return NextResponse.json(
         { success: false, error: 'File content does not match declared type' },
@@ -97,9 +99,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
+    const storagePath = `${sessionId}/${participantId}/${stepId}.${ext}`;
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to Supabase Storage (upsert to allow re-upload)
     const { error: uploadError } = await supabase.storage
       .from('submission-images')
       .upload(storagePath, buffer, {
@@ -115,7 +118,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get public URL
     const { data: urlData } = supabase.storage
       .from('submission-images')
       .getPublicUrl(storagePath);

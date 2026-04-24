@@ -1,12 +1,19 @@
 // ============================================================================
 // Join Code Generator
 // Supports two formats:
-// - 4-character alphanumeric (excluding ambiguous chars: I, O, 0, 1)
+// - 6-character alphanumeric for new codes
+// - Legacy 4-character alphanumeric codes remain valid
 // - Two-word codes (adjective-noun)
 // ============================================================================
 
 // Characters excluding ambiguous ones (I, O, 0, 1)
 const SAFE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CURRENT_ALPHANUMERIC_CODE_LENGTH = 6;
+const LEGACY_ALPHANUMERIC_CODE_LENGTHS = [4];
+const VALID_ALPHANUMERIC_CODE_LENGTHS = [
+  ...LEGACY_ALPHANUMERIC_CODE_LENGTHS,
+  CURRENT_ALPHANUMERIC_CODE_LENGTH,
+];
 
 // Word lists for two-word codes
 const ADJECTIVES = [
@@ -45,11 +52,23 @@ function cryptoRandomInt(max: number): number {
 }
 
 /**
- * Generate a random 4-character alphanumeric code
+ * Validate alphanumeric join codes across supported lengths.
  */
-export function generateAlphanumericCode(): string {
+function isAlphanumericJoinCode(code: string): boolean {
+  return (
+    VALID_ALPHANUMERIC_CODE_LENGTHS.includes(code.length) &&
+    /^[A-HJ-NP-Za-hj-np-z2-9]+$/.test(code)
+  );
+}
+
+/**
+ * Generate a random alphanumeric code using the current default length.
+ */
+export function generateAlphanumericCode(
+  length: number = CURRENT_ALPHANUMERIC_CODE_LENGTH
+): string {
   let code = '';
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < length; i++) {
     code += SAFE_CHARS.charAt(cryptoRandomInt(SAFE_CHARS.length));
   }
   return code;
@@ -87,9 +106,8 @@ export function normalizeJoinCode(code: string): string {
 export function isValidJoinCodeFormat(code: string): boolean {
   const normalized = code.trim();
   
-  // Check 4-char alphanumeric format
-  const alphanumericRegex = /^[A-HJ-NP-Za-hj-np-z2-9]{4}$/;
-  if (alphanumericRegex.test(normalized)) {
+  // Check legacy/new alphanumeric formats
+  if (isAlphanumericJoinCode(normalized)) {
     return true;
   }
   
@@ -108,7 +126,7 @@ export function isValidJoinCodeFormat(code: string): boolean {
 export function detectJoinCodeFormat(code: string): JoinCodeFormat | null {
   const normalized = code.trim();
   
-  if (/^[A-HJ-NP-Za-hj-np-z2-9]{4}$/.test(normalized)) {
+  if (isAlphanumericJoinCode(normalized)) {
     return 'alphanumeric';
   }
   

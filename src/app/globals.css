@@ -106,8 +106,8 @@ input, select, textarea {
 }
 
 .presenter-join-code {
-  @apply block max-w-full overflow-hidden text-6xl font-bold leading-none whitespace-nowrap text-brand-600;
-  letter-spacing: 0.12em;
+  @apply block w-full whitespace-nowrap text-5xl font-bold leading-none text-brand-600;
+  letter-spacing: 0.08em;
 }
 
 .presenter-step-title {

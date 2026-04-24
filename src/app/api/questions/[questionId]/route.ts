@@ -1,25 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
 
 const answerSchema = z.object({
   answerText: z.string().min(1).max(2000),
 });
+
+async function authorizeQuestionAccess(questionId: string) {
+  const supabase = await createServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return {
+      question: null,
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      ),
+    };
+  }
+
+  const serviceClient = await createServiceClient();
+  const [{ data: facilitator }, { data: question }] = await Promise.all([
+    serviceClient
+      .from('facilitator_users')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .single(),
+    serviceClient
+      .from('session_questions')
+      .select('id, session_id')
+      .eq('id', questionId)
+      .single(),
+  ]);
+
+  if (!facilitator) {
+    return {
+      question: null,
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Facilitator not found' },
+        { status: 403 }
+      ),
+    };
+  }
+
+  if (!question) {
+    return {
+      question: null,
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Question not found or access denied' },
+        { status: 404 }
+      ),
+    };
+  }
+
+  const { data: session } = await serviceClient
+    .from('sessions')
+    .select('organization_id')
+    .eq('id', question.session_id)
+    .single();
+
+  if (!session || session.organization_id !== facilitator.organization_id) {
+    return {
+      question: null,
+      serviceClient: null,
+      response: NextResponse.json(
+        { success: false, error: 'Question not found or access denied' },
+        { status: 404 }
+      ),
+    };
+  }
+
+  return {
+    question,
+    serviceClient,
+    response: null,
+  };
+}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ questionId: string }> }
 ) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { questionId } = await params;
     const body = await request.json();
     const validation = answerSchema.safeParse(body);
@@ -31,8 +96,12 @@ export async function PATCH(
       );
     }
 
-    const serviceClient = await createServiceClient();
-    const { data: question, error } = await serviceClient
+    const access = await authorizeQuestionAccess(questionId);
+    if (access.response) {
+      return access.response;
+    }
+
+    const { data: question, error } = await access.serviceClient!
       .from('session_questions')
       .update({
         answer_text: validation.data.answerText,
@@ -66,19 +135,13 @@ export async function DELETE(
   { params }: { params: Promise<{ questionId: string }> }
 ) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const { questionId } = await params;
+    const access = await authorizeQuestionAccess(questionId);
+    if (access.response) {
+      return access.response;
     }
 
-    const { questionId } = await params;
-    const serviceClient = await createServiceClient();
-
-    const { error } = await serviceClient
+    const { error } = await access.serviceClient!
       .from('session_questions')
       .delete()
       .eq('id', questionId);

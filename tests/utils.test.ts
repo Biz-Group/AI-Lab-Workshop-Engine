@@ -18,13 +18,12 @@ import {
 } from '../src/lib/utils/session-token';
 import { substituteVariables } from '../src/lib/utils/variables';
 import { cn, formatDate, truncate, getTimeRemaining, percentage } from '../src/lib/utils/common';
-import process from 'node:process';
 
 describe('Join Code Utils', () => {
   describe('generateJoinCode', () => {
-    it('should generate a 4-character alphanumeric code by default', () => {
+    it('should generate a 6-character alphanumeric code by default', () => {
       const code = generateJoinCode();
-      expect(code).toHaveLength(4);
+      expect(code).toHaveLength(6);
       expect(code).toMatch(/^[A-HJ-NP-Z2-9]+$/);
     });
 
@@ -60,7 +59,7 @@ describe('Join Code Utils', () => {
 
   describe('formatJoinCodeForDisplay', () => {
     it('should uppercase alphanumeric codes', () => {
-      expect(formatJoinCodeForDisplay('ab3k')).toBe('AB3K');
+      expect(formatJoinCodeForDisplay('ab3k9q')).toBe('AB3K9Q');
     });
 
     it('should lowercase two-word codes', () => {
@@ -70,13 +69,14 @@ describe('Join Code Utils', () => {
 
   describe('normalizeJoinCode', () => {
     it('should lowercase and trim', () => {
-      expect(normalizeJoinCode('  AB3K  ')).toBe('ab3k');
+      expect(normalizeJoinCode('  AB3K9Q  ')).toBe('ab3k9q');
     });
   });
 
   describe('isValidJoinCodeFormat', () => {
-    it('should accept valid 4-char alphanumeric codes', () => {
+    it('should accept valid alphanumeric codes in current and legacy lengths', () => {
       expect(isValidJoinCodeFormat('AB3K')).toBe(true);
+      expect(isValidJoinCodeFormat('AB3K9Q')).toBe(true);
     });
 
     it('should accept valid two-word codes', () => {
@@ -91,11 +91,7 @@ describe('Join Code Utils', () => {
 });
 
 describe('Session Token Utils', () => {
-  // These tests require the SESSION_TOKEN_SECRET env var
-  // Skip if not available
-  const hasSecret = !!process.env.SESSION_TOKEN_SECRET;
-
-  describe.skipIf(!hasSecret)('createSessionToken', () => {
+  describe('createSessionToken', () => {
     it('should create a valid JWT token', async () => {
       const token = await createSessionToken(
         'test-participant-id',
@@ -107,7 +103,7 @@ describe('Session Token Utils', () => {
     });
   });
 
-  describe.skipIf(!hasSecret)('verifySessionToken', () => {
+  describe('verifySessionToken', () => {
     it('should verify a valid token', async () => {
       const token = await createSessionToken(
         'test-participant-id',
@@ -131,33 +127,39 @@ describe('Session Token Utils', () => {
 
 describe('Variable Substitution', () => {
   describe('substituteVariables', () => {
+    const baseContext = {
+      ORG_NAME: 'Acme',
+      INDUSTRY: 'Technology',
+      TONE_NOTES: 'Helpful and practical',
+    };
+
     it('should substitute simple variables', () => {
       const template = 'Hello, {NAME}!';
-      const values = { NAME: 'World' };
+      const values = { ...baseContext, NAME: 'World' };
       expect(substituteVariables(template, values)).toBe('Hello, World!');
     });
 
     it('should handle multiple variables', () => {
       const template = '{GREETING}, {NAME}! Today is {DAY}.';
-      const values = { GREETING: 'Hello', NAME: 'Alice', DAY: 'Monday' };
+      const values = { ...baseContext, GREETING: 'Hello', NAME: 'Alice', DAY: 'Monday' };
       expect(substituteVariables(template, values)).toBe('Hello, Alice! Today is Monday.');
     });
 
     it('should replace unmatched variables with placeholder', () => {
       const template = 'Hello, {NAME}! Your role is {ROLE}.';
-      const values = { NAME: 'Bob' };
+      const values = { ...baseContext, NAME: 'Bob' };
       expect(substituteVariables(template, values)).toBe('Hello, Bob! Your role is [ROLE].');
     });
 
     it('should handle empty values', () => {
       const template = 'Value: {VALUE}';
-      const values = { VALUE: '' };
+      const values = { ...baseContext, VALUE: '' };
       expect(substituteVariables(template, values)).toBe('Value: ');
     });
 
     it('should handle variables with underscores', () => {
       const template = 'Task: {TASK_DESCRIPTION}';
-      const values = { TASK_DESCRIPTION: 'Write code' };
+      const values = { ...baseContext, TASK_DESCRIPTION: 'Write code' };
       expect(substituteVariables(template, values)).toBe('Task: Write code');
     });
   });

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
-import { verifySessionToken } from '@/lib/utils/session-token';
+import { requireParticipantSession } from '@/lib/server/participant-session';
 import { buildPromptPackData } from '@/lib/server/prompt-pack';
-
-export const maxDuration = 10;
 import {
   escapeHtml,
   formatPromptPackInstructionSections,
 } from '@/lib/utils/prompt-pack';
+
+export const maxDuration = 10;
 
 const emailPromptPackSchema = z.object({
   sessionId: z.string().uuid(),
@@ -141,32 +141,6 @@ function renderPromptPackEmailHtml(
 
 export async function POST(request: NextRequest) {
   try {
-    let token =
-      request.cookies.get('workshop_session_token')?.value ||
-      request.cookies.get('session_token')?.value;
-
-    if (!token) {
-      const authHeader = request.headers.get('Authorization');
-      if (authHeader?.startsWith('Bearer ')) {
-        token = authHeader.slice(7);
-      }
-    }
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Missing session token' },
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifySessionToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid or expired token' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const validation = emailPromptPackSchema.safeParse(body);
     if (!validation.success) {
@@ -177,21 +151,20 @@ export async function POST(request: NextRequest) {
     }
 
     const { sessionId, participantId, email } = validation.data;
-
-    if (payload.session_id !== sessionId || payload.participant_id !== participantId) {
-      return NextResponse.json(
-        { success: false, error: 'Token mismatch' },
-        { status: 403 }
-      );
+    const auth = await requireParticipantSession(request, { participantId, sessionId });
+    if (auth.response) {
+      return auth.response;
     }
 
     const supabase = await createServiceClient();
+    const authenticatedParticipantId = auth.payload.participant_id;
+    const authenticatedSessionId = auth.payload.session_id;
 
     const { data: participant, error: participantError } = await supabase
       .from('participants')
       .select('id, display_name, session_id, feedback_submitted')
-      .eq('id', participantId)
-      .eq('session_id', sessionId)
+      .eq('id', authenticatedParticipantId)
+      .eq('session_id', authenticatedSessionId)
       .single();
 
     if (participantError || !participant) {
@@ -211,12 +184,13 @@ export async function POST(request: NextRequest) {
     await supabase
       .from('participants')
       .update({ email })
-      .eq('id', participantId);
+      .eq('id', authenticatedParticipantId)
+      .eq('session_id', authenticatedSessionId);
 
     const { data: session } = await supabase
       .from('sessions')
       .select('organization_id')
-      .eq('id', sessionId)
+      .eq('id', authenticatedSessionId)
       .single();
 
     if (session?.organization_id) {
@@ -225,7 +199,7 @@ export async function POST(request: NextRequest) {
           organization_id: session.organization_id,
           email,
           display_name: participant.display_name,
-          session_id: sessionId,
+          session_id: authenticatedSessionId,
         },
         { onConflict: 'organization_id,email' }
       );
@@ -234,14 +208,17 @@ export async function POST(request: NextRequest) {
     const gmailUser = process.env.GMAIL_USER;
     const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
     if (!gmailUser || !gmailAppPassword) {
-      console.log('Email would be sent to:', email, 'for participant:', participantId);
+      console.log('Email would be sent to:', email, 'for participant:', authenticatedParticipantId);
       return NextResponse.json({
         success: true,
         message: 'Email queued (Gmail SMTP not configured - development mode)',
       });
     }
 
-    const promptPack = await buildPromptPackData(sessionId, participantId);
+    const promptPack = await buildPromptPackData(
+      authenticatedSessionId,
+      authenticatedParticipantId
+    );
     const html = renderPromptPackEmailHtml(participant.display_name, promptPack);
 
     const nodemailer = await import('nodemailer');

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { normalizeJoinCode } from '@/lib/utils';
 import { getJoinField } from '@/lib/utils/supabase-join';
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -15,6 +16,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rl = checkRateLimit(`verify:${ip}`, 20, 60_000);
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt);
+
     const supabase = await createServiceClient();
     const normalizedCode = normalizeJoinCode(code);
 

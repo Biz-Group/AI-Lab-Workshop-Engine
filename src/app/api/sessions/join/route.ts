@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readParticipantSession } from '@/lib/server/participant-session';
 import { createSessionToken, setSessionTokenCookie } from '@/lib/utils/session-token';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 import { z } from 'zod';
@@ -53,47 +54,31 @@ export async function POST(request: NextRequest) {
         }
       | null = null;
 
-    if (normalizedEmail) {
-      const { data: existingParticipants, error: existingParticipantError } = await supabase
+    const existingParticipantSession = await readParticipantSession(request);
+    if (existingParticipantSession?.session_id === validatedData.sessionId) {
+      const { data: resumedParticipant, error: participantUpdateError } = await supabase
         .from('participants')
-        .select('id, display_name, email_consent, marketing_consent')
+        .update({
+          display_name: normalizedDisplayName,
+          email: normalizedEmail,
+          email_consent: validatedData.emailConsent,
+          marketing_consent: validatedData.marketingConsent,
+          last_seen_at: new Date().toISOString(),
+        })
+        .eq('id', existingParticipantSession.participant_id)
         .eq('session_id', validatedData.sessionId)
-        .ilike('email', normalizedEmail)
-        .order('joined_at', { ascending: false })
-        .limit(5);
+        .select('id, display_name')
+        .single();
 
-      if (existingParticipantError) {
-        console.error('Participant lookup error:', existingParticipantError);
+      if (participantUpdateError) {
+        console.error('Participant resume update error:', participantUpdateError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to resume session' },
+          { status: 500 }
+        );
       }
 
-      const matchedParticipant = existingParticipants?.find((row) =>
-        row.display_name.trim().toLowerCase() === normalizedDisplayName.toLowerCase()
-      ) || existingParticipants?.[0];
-
-      if (matchedParticipant) {
-        const { data: updatedParticipant, error: participantUpdateError } = await supabase
-          .from('participants')
-          .update({
-            display_name: normalizedDisplayName,
-            email: normalizedEmail,
-            email_consent: matchedParticipant.email_consent || validatedData.emailConsent,
-            marketing_consent: matchedParticipant.marketing_consent || validatedData.marketingConsent,
-            last_seen_at: new Date().toISOString(),
-          })
-          .eq('id', matchedParticipant.id)
-          .select('id, display_name')
-          .single();
-
-        if (participantUpdateError) {
-          console.error('Participant resume update error:', participantUpdateError);
-          return NextResponse.json(
-            { success: false, error: 'Failed to resume session' },
-            { status: 500 }
-          );
-        }
-
-        participant = updatedParticipant;
-      }
+      participant = resumedParticipant;
     }
 
     if (!participant) {
@@ -135,11 +120,28 @@ export async function POST(request: NextRequest) {
     const token = await createSessionToken(
       participant.id,
       validatedData.sessionId,
-      validatedData.displayName
+      normalizedDisplayName
     );
 
     // Set cookie
     await setSessionTokenCookie(token);
+
+    const { error: analyticsError } = await supabase.from('analytics_events').insert([
+      {
+        participant_id: participant.id,
+        session_id: validatedData.sessionId,
+        event_type: 'join_verified',
+      },
+      {
+        participant_id: participant.id,
+        session_id: validatedData.sessionId,
+        event_type: 'join_completed',
+      },
+    ]);
+
+    if (analyticsError) {
+      console.error('Join analytics error:', analyticsError);
+    }
 
     return NextResponse.json({
       success: true,

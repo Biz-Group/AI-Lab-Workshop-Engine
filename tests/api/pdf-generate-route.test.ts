@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const verifySessionTokenMock = vi.fn();
+const requireParticipantSessionMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
 const renderPromptPackPdfMock = vi.fn();
 
-vi.mock('@/lib/utils/session-token', () => ({
-  verifySessionToken: verifySessionTokenMock,
+vi.mock('@/lib/server/participant-session', () => ({
+  requireParticipantSession: requireParticipantSessionMock,
 }));
 
 vi.mock('@/lib/server/prompt-pack', () => ({
@@ -34,9 +34,15 @@ function createRequest() {
 describe('POST /api/pdf/generate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    verifySessionTokenMock.mockResolvedValue({
-      session_id: '11111111-1111-1111-1111-111111111111',
-      participant_id: '22222222-2222-2222-2222-222222222222',
+    requireParticipantSessionMock.mockResolvedValue({
+      payload: {
+        session_id: '11111111-1111-1111-1111-111111111111',
+        participant_id: '22222222-2222-2222-2222-222222222222',
+        display_name: 'Alex',
+        exp: 1,
+        iat: 1,
+      },
+      response: null,
     });
     buildPromptPackDataMock.mockResolvedValue({
       participantName: 'Alex',

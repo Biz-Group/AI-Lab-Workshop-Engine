@@ -103,29 +103,6 @@ export default function JoinWithCodePage() {
         return;
       }
 
-      await Promise.allSettled([
-        fetch('/api/analytics/event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            participantId: data.participant.id,
-            sessionId: sessionInfo.id,
-            eventType: 'join_verified',
-            payload: { code },
-          }),
-        }),
-        fetch('/api/analytics/event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            participantId: data.participant.id,
-            sessionId: sessionInfo.id,
-            eventType: 'join_completed',
-            payload: { code },
-          }),
-        }),
-      ]);
-
       // Redirect to session
       router.push(`/s/${sessionInfo.id}`);
     } catch {

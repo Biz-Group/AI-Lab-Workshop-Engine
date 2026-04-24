@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkshopRunner } from '@/components/workshop/WorkshopRunner';
 
 const pushMock = vi.fn();
+const routerMock = { push: pushMock };
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => routerMock,
 }));
 
 vi.mock('next/image', () => ({
@@ -17,21 +20,6 @@ vi.mock('react-hot-toast', () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
-}));
-
-vi.mock('@/lib/supabase', () => ({
-  createClient: () => ({
-    channel: () => {
-      const channel = {
-        on: vi.fn(),
-        subscribe: vi.fn(),
-      };
-      channel.on.mockReturnValue(channel);
-      channel.subscribe.mockReturnValue(channel);
-      return channel;
-    },
-    removeChannel: vi.fn(),
-  }),
 }));
 
 function mockJsonResponse(body: unknown) {
@@ -88,6 +76,10 @@ function createProps(submissions: Array<{ id: string; step_id: string; content: 
   };
 }
 
+afterEach(() => {
+  cleanup();
+});
+
 describe('WorkshopRunner soft gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,6 +89,18 @@ describe('WorkshopRunner soft gating', () => {
 
       if (url.includes('/api/questions') && (!init?.method || init.method === 'GET')) {
         return mockJsonResponse({ success: true, data: [] });
+      }
+
+      if (url.includes('/api/sessions/state')) {
+        return mockJsonResponse({
+          success: true,
+          session: {
+            id: '11111111-1111-1111-1111-111111111111',
+            status: 'live',
+            currentStepId: null,
+            timerEndAt: null,
+          },
+        });
       }
 
       if (url.includes('/api/analytics/event')) {

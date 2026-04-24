@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { verifySessionToken } from '@/lib/utils/session-token';
-import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 import { z } from 'zod';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireParticipantSession } from '@/lib/server/participant-session';
+import { getSubmissionImagesPublicBaseUrl } from '@/lib/supabase/config';
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 const submissionSchema = z.object({
   participantId: z.string().uuid(),
@@ -17,35 +18,60 @@ const submissionSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify session token
-    const authHeader = request.headers.get('Authorization');
-    let tokenPayload = null;
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      tokenPayload = await verifySessionToken(token);
-    }
-
     const body = await request.json();
     const validatedData = submissionSchema.parse(body);
 
-    // Rate limit: 20 submissions per minute per participant
     const rl = checkRateLimit(`sub:${validatedData.participantId}`, 20, 60_000);
     if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
-    // If we have a valid token, verify it matches the request
-    if (tokenPayload) {
-      if (tokenPayload.participant_id !== validatedData.participantId ||
-          tokenPayload.session_id !== validatedData.sessionId) {
+    const auth = await requireParticipantSession(request, {
+      participantId: validatedData.participantId,
+      sessionId: validatedData.sessionId,
+    });
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const supabase = await createServiceClient();
+    const [participantResult, stepResult] = await Promise.all([
+      supabase
+        .from('participants')
+        .select('id')
+        .eq('id', validatedData.participantId)
+        .eq('session_id', validatedData.sessionId)
+        .single(),
+      supabase
+        .from('session_snapshot_steps')
+        .select('id')
+        .eq('id', validatedData.stepId)
+        .eq('session_id', validatedData.sessionId)
+        .single(),
+    ]);
+
+    if (!participantResult.data) {
+      return NextResponse.json(
+        { success: false, error: 'Participant not found in session' },
+        { status: 403 }
+      );
+    }
+
+    if (!stepResult.data) {
+      return NextResponse.json(
+        { success: false, error: 'Step not found in session' },
+        { status: 400 }
+      );
+    }
+
+    if (validatedData.imageUrl) {
+      const allowedPrefix = `${getSubmissionImagesPublicBaseUrl()}/${validatedData.sessionId}/${validatedData.participantId}/${validatedData.stepId}.`;
+      if (!validatedData.imageUrl.startsWith(allowedPrefix)) {
         return NextResponse.json(
-          { success: false, error: 'Token does not match request' },
-          { status: 403 }
+          { success: false, error: 'Image URL does not belong to this submission' },
+          { status: 400 }
         );
       }
     }
 
-    const supabase = await createServiceClient();
-
-    // Upsert submission (update if exists)
     const { data: submission, error } = await supabase
       .from('submissions')
       .upsert(
@@ -72,14 +98,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update participant's current step
     await supabase
       .from('participants')
       .update({
         current_step_id: validatedData.stepId,
         last_seen_at: new Date().toISOString(),
       })
-      .eq('id', validatedData.participantId);
+      .eq('id', validatedData.participantId)
+      .eq('session_id', validatedData.sessionId);
 
     return NextResponse.json({
       success: true,
@@ -98,7 +124,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     console.error('Submission error:', err);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

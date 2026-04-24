@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireParticipantSession } from '@/lib/server/participant-session';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 const feedbackSchema = z.object({
@@ -28,6 +29,11 @@ export async function POST(request: NextRequest) {
     }
 
     const { sessionId, participantId, rating, feedback, mostValuable } = validation.data;
+
+    const auth = await requireParticipantSession(request, { participantId, sessionId });
+    if (auth.response) {
+      return auth.response;
+    }
 
     // Rate limit: 5 feedback submissions per minute per participant
     const rl = checkRateLimit(`fb:${participantId}`, 5, 60_000);

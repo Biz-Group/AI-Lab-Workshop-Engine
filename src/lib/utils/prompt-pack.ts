@@ -29,15 +29,6 @@ function readString(record: Record<string, unknown> | null, key: string): string
   return typeof value === 'string' ? value : null;
 }
 
-function hasPromptPackContent(entry: PromptPackEntry): boolean {
-  return Boolean(
-    entry.participantResponse?.content ||
-      entry.participantResponse?.imageUrl ||
-      entry.promptBlocks.length > 0 ||
-      Object.values(entry.stepInstructions).some(Boolean)
-  );
-}
-
 export interface PromptPackSourceData {
   participantName: string;
   sessionDate: string;

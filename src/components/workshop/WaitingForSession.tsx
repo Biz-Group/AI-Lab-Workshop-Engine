@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui';
 import { LoadingSpinner } from '@/components/ui';
 import { BookOpen, CheckCircle2, PenSquare, Wifi } from 'lucide-react';
@@ -25,66 +24,47 @@ export function WaitingForSession({
   workshopDescription,
 }: WaitingForSessionProps) {
   const router = useRouter();
-  const [status, setStatus] = useState<string>('waiting');
-  const [facilitatorPresence, setFacilitatorPresence] = useState<'connecting' | 'online' | 'away'>('connecting');
+  const [status, setStatus] = useState<string>('published');
+  const [roomStatus, setRoomStatus] = useState<'checking' | 'waiting'>('checking');
 
   useEffect(() => {
-    const supabase = createClient();
+    let isCancelled = false;
 
-    // Subscribe to realtime session status changes
-    const channel = supabase
-      .channel(`session-status:${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'sessions',
-          filter: `id=eq.${sessionId}`,
-        },
-        (payload) => {
-          const newStatus = payload.new.status;
-          if (newStatus === 'live') {
-            // Session is now live - reload to get the full workshop
-            router.refresh();
-          } else if (newStatus === 'ended') {
-            setStatus('ended');
-          }
+    const checkSessionState = async () => {
+      try {
+        const response = await fetch(`/api/sessions/state?sessionId=${sessionId}`, {
+          cache: 'no-store',
+        });
+        const data = await response.json();
+        if (!data.success || isCancelled) return;
+
+        if (data.session.status === 'live') {
+          router.refresh();
+          return;
         }
-      )
-      .subscribe();
 
-    const presenceChannel = supabase
-      .channel(`presence:${sessionId}`)
-      .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState<{ role?: string }>();
-        const hasFacilitator = Object.values(state).some((presences) =>
-          presences.some((presence) => presence.role === 'facilitator')
-        );
+        if (data.session.status === 'ended') {
+          setStatus('ended');
+          return;
+        }
 
-        setFacilitatorPresence(hasFacilitator ? 'online' : 'away');
-      })
-      .subscribe();
-
-    // Poll every 30 seconds as a fallback (realtime handles the fast path)
-    const interval = setInterval(async () => {
-      const { data } = await supabase
-        .from('sessions')
-        .select('status')
-        .eq('id', sessionId)
-        .single();
-
-      if (data?.status === 'live') {
-        router.refresh();
-      } else if (data?.status === 'ended') {
-        setStatus('ended');
+        setStatus(data.session.status);
+        setRoomStatus('waiting');
+      } catch {
+        if (!isCancelled) {
+          setRoomStatus('checking');
+        }
       }
-    }, 30000);
+    };
+
+    void checkSessionState();
+    const intervalId = window.setInterval(() => {
+      void checkSessionState();
+    }, 5_000);
 
     return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(presenceChannel);
-      clearInterval(interval);
+      isCancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [sessionId, router]);
 
@@ -128,28 +108,22 @@ export function WaitingForSession({
 
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
-                facilitatorPresence === 'online'
-                  ? 'bg-green-500/15 text-green-700'
-                  : facilitatorPresence === 'away'
-                    ? 'bg-amber-500/15 text-amber-700'
-                    : 'bg-slate-500/15 text-slate-700'
+                roomStatus === 'waiting'
+                  ? 'bg-amber-500/15 text-amber-700'
+                  : 'bg-slate-500/15 text-slate-700'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  facilitatorPresence === 'online'
-                    ? 'bg-green-500 animate-pulse'
-                    : facilitatorPresence === 'away'
-                      ? 'bg-amber-500'
-                      : 'bg-slate-500 animate-pulse'
+                  roomStatus === 'waiting'
+                    ? 'bg-amber-500'
+                    : 'bg-slate-500 animate-pulse'
                 }`}
               />
               <Wifi className="w-4 h-4 shrink-0" strokeWidth={2.25} />
-              {facilitatorPresence === 'online'
-                ? 'Facilitator connected'
-                : facilitatorPresence === 'away'
-                  ? 'Facilitator not yet in the room'
-                  : 'Checking facilitator status'}
+              {roomStatus === 'waiting'
+                ? 'Waiting for facilitator to start'
+                : 'Checking workshop status'}
             </span>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">

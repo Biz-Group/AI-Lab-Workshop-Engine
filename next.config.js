@@ -37,9 +37,9 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
     optimizePackageImports: ['lucide-react'],
-    outputFileTracingIncludes: {
-      '/api/pdf/generate': reactPdfIncludePatterns,
-    },
+  },
+  outputFileTracingIncludes: {
+    '/api/pdf/generate': reactPdfIncludePatterns,
   },
   productionBrowserSourceMaps: false,
   images: {

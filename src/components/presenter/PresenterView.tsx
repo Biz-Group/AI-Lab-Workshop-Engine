@@ -67,6 +67,25 @@ interface PresenterViewProps {
   initialParticipantCount: number;
 }
 
+type ChannelConnectionStatus = 'connecting' | 'connected' | 'error';
+
+function mapRealtimeChannelStatus(status: string): ChannelConnectionStatus {
+  if (status === 'SUBSCRIBED') return 'connected';
+  if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+    return 'error';
+  }
+  return 'connecting';
+}
+
+function deriveBroadcastStatus(
+  presenterStatus: ChannelConnectionStatus,
+  broadcastStatus: ChannelConnectionStatus
+): ChannelConnectionStatus {
+  if (presenterStatus === 'error' || broadcastStatus === 'error') return 'error';
+  if (presenterStatus === 'connected' && broadcastStatus === 'connected') return 'connected';
+  return 'connecting';
+}
+
 export function PresenterView({ 
   session: initialSession, 
   modules,
@@ -93,7 +112,13 @@ export function PresenterView({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [showAnswered, setShowAnswered] = useState(false);
-  const [broadcastStatus, setBroadcastStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [channelStatuses, setChannelStatuses] = useState<{
+    presenter: ChannelConnectionStatus;
+    broadcast: ChannelConnectionStatus;
+  }>({
+    presenter: 'connecting',
+    broadcast: 'connecting',
+  });
   const [participationSummary, setParticipationSummary] = useState({
     totalParticipants: initialParticipantCount,
     activeParticipants: 0,
@@ -103,6 +128,11 @@ export function PresenterView({
     promptPackDownloads: 0,
     promptPackEmails: 0,
   });
+  const currentStepIdRef = useRef<string | null>(session.currentStepId);
+  const broadcastStatus = useMemo(
+    () => deriveBroadcastStatus(channelStatuses.presenter, channelStatuses.broadcast),
+    [channelStatuses.broadcast, channelStatuses.presenter]
+  );
 
   // Flatten steps (memoized)
   const allSteps = useMemo(() => modules.flatMap((module, moduleIndex) =>
@@ -131,24 +161,24 @@ export function PresenterView({
       supabase
         .from('participants')
         .select('id, display_name, email, joined_at, last_seen_at, current_step_id, feedback_submitted')
-        .eq('session_id', session.id)
+        .eq('session_id', initialSession.id)
         .order('joined_at', { ascending: true }),
       supabase
         .from('submissions')
         .select('participant_id, step_id')
-        .eq('session_id', session.id),
+        .eq('session_id', initialSession.id),
       supabase
         .from('analytics_events')
         .select('participant_id, event_type')
-        .eq('session_id', session.id),
+        .eq('session_id', initialSession.id),
       supabase
         .from('session_questions')
         .select('participant_id')
-        .eq('session_id', session.id),
+        .eq('session_id', initialSession.id),
       supabase
         .from('analytics_events')
         .select('participant_id')
-        .eq('session_id', session.id)
+        .eq('session_id', initialSession.id)
         .eq('event_type', 'stuck_signal')
         .gte('created_at', fiveMinutesAgo),
     ]);
@@ -170,26 +200,31 @@ export function PresenterView({
     setParticipationSummary(summary);
 
     return rows;
-  }, [session.id, stepTitlesById]);
+  }, [initialSession.id, stepTitlesById]);
 
   // Fetch completion count for current step
   const fetchCompletions = useCallback(async () => {
-    if (!session.currentStepId) return;
+    const stepId = currentStepIdRef.current;
+    if (!stepId) {
+      setCompletedCount(0);
+      return;
+    }
 
     const supabase = createClient();
     const { count } = await supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
       .eq('session_id', initialSession.id)
-      .eq('step_id', session.currentStepId);
+      .eq('step_id', stepId);
 
     setCompletedCount(count || 0);
-  }, [session.currentStepId, initialSession.id]);
+  }, [initialSession.id]);
 
   // Fetch completion count once when current step changes (Realtime handles incremental updates)
   useEffect(() => {
-    fetchCompletions();
-  }, [fetchCompletions]);
+    currentStepIdRef.current = session.currentStepId;
+    void fetchCompletions();
+  }, [fetchCompletions, session.currentStepId]);
 
   useEffect(() => {
     void fetchParticipationAnalytics();
@@ -313,6 +348,12 @@ export function PresenterView({
   // Subscribe to realtime updates + track facilitator presence
   useEffect(() => {
     const supabase = createClient();
+    let mounted = true;
+
+    setChannelStatuses({
+      presenter: 'connecting',
+      broadcast: 'connecting',
+    });
 
     const presenterChannel = supabase
       .channel(`presenter:${initialSession.id}`)
@@ -351,7 +392,7 @@ export function PresenterView({
           filter: `session_id=eq.${initialSession.id}`,
         },
         () => {
-          fetchCompletions();
+          void fetchCompletions();
           void fetchParticipationAnalytics();
         }
       )
@@ -364,27 +405,39 @@ export function PresenterView({
           filter: `session_id=eq.${initialSession.id}`,
         },
         () => {
-          fetchQuestions();
+          void fetchQuestions();
           void fetchParticipationAnalytics();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!mounted) return;
+        setChannelStatuses((previous) => ({
+          ...previous,
+          presenter: mapRealtimeChannelStatus(status),
+        }));
+      });
 
     const presenceChannel = supabase.channel(`presence:${initialSession.id}`);
-    let mounted = true;
 
     presenceChannel.subscribe(async (status) => {
       if (!mounted) return;
       if (status === 'SUBSCRIBED') {
-        setBroadcastStatus('connected');
-        await presenceChannel.track({ role: 'facilitator' });
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        setBroadcastStatus('error');
+        try {
+          await presenceChannel.track({ role: 'facilitator' });
+        } catch {
+          // Presence tracking is best-effort and should not impact connection badge state.
+        }
       }
     });
 
     const bcastChannel = supabase.channel(`workshop-broadcast:${initialSession.id}`);
-    bcastChannel.subscribe();
+    bcastChannel.subscribe((status) => {
+      if (!mounted) return;
+      setChannelStatuses((previous) => ({
+        ...previous,
+        broadcast: mapRealtimeChannelStatus(status),
+      }));
+    });
     broadcastChannelRef.current = bcastChannel;
 
     return () => {
@@ -534,9 +587,9 @@ export function PresenterView({
         {/* Center-Left Panel - Join Code & Stats */}
         <div className="w-72 flex-shrink-0 bg-gray-800 p-6 flex flex-col border-r border-gray-700">
           {/* Join Code */}
-          <div className="text-center mb-8 px-2">
+          <div className="text-center mb-8">
             <p className="text-gray-400 text-sm mb-2">JOIN CODE</p>
-            <div className="presenter-join-code -ml-2 text-5xl text-brand-400">
+            <div className="presenter-join-code px-1 text-brand-400">
               {formatJoinCodeForDisplay(session.joinCode)}
             </div>
             <p className="text-gray-500 text-sm mt-2">
