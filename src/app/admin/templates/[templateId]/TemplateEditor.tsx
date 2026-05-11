@@ -23,6 +23,23 @@ import {
 import { Card, CardContent, Button, Input, TextArea, Modal, ConfirmModal } from '@/components/ui';
 import { TemplatePreview } from './TemplatePreview';
 import toast from 'react-hot-toast';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 interface PromptBlock {
@@ -64,6 +81,21 @@ interface Template {
   organization_id: string;
   created_at: string;
   modules: Module[];
+}
+
+// ─── Reorder helper ─────────────────────────────────────────────────────
+async function persistReorder(table: 'modules' | 'module_steps' | 'prompt_blocks', items: { id: string; order_index: number }[]) {
+  try {
+    const res = await fetch('/api/admin/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, items }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+  } catch (err) {
+    toast.error('Failed to save order');
+  }
 }
 
 // ─── Main TemplateEditor ────────────────────────────────────────────────
@@ -232,6 +264,86 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     }));
   }, []);
 
+  // ── DnD: reorder modules (activities) ─────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleModulesReorder = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setTemplate(prev => {
+      const oldIndex = prev.modules.findIndex(m => m.id === active.id);
+      const newIndex = prev.modules.findIndex(m => m.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const reordered = arrayMove(prev.modules, oldIndex, newIndex).map((m, i) => ({
+        ...m,
+        order_index: i,
+      }));
+
+      persistReorder('modules', reordered.map(m => ({ id: m.id, order_index: m.order_index })));
+
+      return { ...prev, modules: reordered };
+    });
+  }, []);
+
+  const handleStepsReorder = useCallback((moduleId: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setTemplate(prev => ({
+      ...prev,
+      modules: prev.modules.map(m => {
+        if (m.id !== moduleId) return m;
+        const oldIndex = m.steps.findIndex(s => s.id === active.id);
+        const newIndex = m.steps.findIndex(s => s.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return m;
+
+        const reordered = arrayMove(m.steps, oldIndex, newIndex).map((s, i) => ({
+          ...s,
+          order_index: i,
+        }));
+
+        persistReorder('module_steps', reordered.map(s => ({ id: s.id, order_index: s.order_index })));
+
+        return { ...m, steps: reordered };
+      }),
+    }));
+  }, []);
+
+  const handleBlocksReorder = useCallback((moduleId: string, stepId: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setTemplate(prev => ({
+      ...prev,
+      modules: prev.modules.map(m => {
+        if (m.id !== moduleId) return m;
+        return {
+          ...m,
+          steps: m.steps.map(s => {
+            if (s.id !== stepId) return s;
+            const oldIndex = s.prompt_blocks.findIndex(b => b.id === active.id);
+            const newIndex = s.prompt_blocks.findIndex(b => b.id === over.id);
+            if (oldIndex === -1 || newIndex === -1) return s;
+
+            const reordered = arrayMove(s.prompt_blocks, oldIndex, newIndex).map((b, i) => ({
+              ...b,
+              order_index: i,
+            }));
+
+            persistReorder('prompt_blocks', reordered.map(b => ({ id: b.id, order_index: b.order_index })));
+
+            return { ...s, prompt_blocks: reordered };
+          }),
+        };
+      }),
+    }));
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Template Header */}
@@ -350,22 +462,29 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
             </CardContent>
           </Card>
         ) : (
-          template.modules.map((mod, index) => (
-            <ModuleCard
-              key={mod.id}
-              module={mod}
-              displayIndex={index + 1}
-              templateId={template.id}
-              onModuleUpdated={handleModuleUpdated}
-              onModuleDeleted={handleModuleDeleted}
-              onStepAdded={handleStepAdded}
-              onStepUpdated={handleStepUpdated}
-              onStepDeleted={handleStepDeleted}
-              onBlockAdded={handleBlockAdded}
-              onBlockUpdated={handleBlockUpdated}
-              onBlockDeleted={handleBlockDeleted}
-            />
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleModulesReorder}>
+            <SortableContext items={template.modules.map(m => m.id)} strategy={verticalListSortingStrategy}>
+              {template.modules.map((mod, index) => (
+                <SortableModuleCard
+                  key={mod.id}
+                  module={mod}
+                  displayIndex={index + 1}
+                  templateId={template.id}
+                  sensors={sensors}
+                  onModuleUpdated={handleModuleUpdated}
+                  onModuleDeleted={handleModuleDeleted}
+                  onStepAdded={handleStepAdded}
+                  onStepUpdated={handleStepUpdated}
+                  onStepDeleted={handleStepDeleted}
+                  onBlockAdded={handleBlockAdded}
+                  onBlockUpdated={handleBlockUpdated}
+                  onBlockDeleted={handleBlockDeleted}
+                  onStepsReorder={handleStepsReorder}
+                  onBlocksReorder={handleBlocksReorder}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         )}
 
         <AddModuleButton templateId={template.id} currentCount={template.modules.length} onAdded={handleModuleAdded} />
@@ -597,11 +716,12 @@ function AddModuleButton({ templateId, currentCount, onAdded }: {
   );
 }
 
-// ─── Module Card (collapsible) ──────────────────────────────────────────
-function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted }: {
+// ─── Sortable Module Card wrapper ───────────────────────────────────────
+function SortableModuleCard(props: {
   module: Module;
   displayIndex: number;
   templateId: string;
+  sensors: ReturnType<typeof useSensors>;
   onModuleUpdated: (moduleId: string, updates: Partial<Module>) => void;
   onModuleDeleted: (moduleId: string) => void;
   onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
@@ -610,6 +730,53 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
+  onStepsReorder: (moduleId: string, event: DragEndEvent) => void;
+  onBlocksReorder: (moduleId: string, stepId: string, event: DragEndEvent) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.module.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <ModuleCard
+        {...props}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ─── Module Card (collapsible) ──────────────────────────────────────────
+function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, sensors, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
+  module: Module;
+  displayIndex: number;
+  templateId: string;
+  dragHandleProps?: Record<string, unknown>;
+  sensors?: ReturnType<typeof useSensors>;
+  onModuleUpdated: (moduleId: string, updates: Partial<Module>) => void;
+  onModuleDeleted: (moduleId: string) => void;
+  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
+  onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
+  onStepDeleted: (moduleId: string, stepId: string) => void;
+  onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
+  onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
+  onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
+  onStepsReorder?: (moduleId: string, event: DragEndEvent) => void;
+  onBlocksReorder?: (moduleId: string, stepId: string, event: DragEndEvent) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -680,6 +847,15 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
       <div className="border-l-4 border-brand-500">
         {/* Activity Header */}
         <div className="p-4 bg-gradient-to-r from-brand-50/60 to-transparent flex items-center justify-between">
+          {dragHandleProps && (
+            <button
+              className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 rounded transition-colors shrink-0 touch-none"
+              title="Drag to reorder"
+              {...dragHandleProps}
+            >
+              <GripVertical className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center gap-3 text-left flex-1 min-w-0"
@@ -757,18 +933,24 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
                     <ListChecks className="w-3.5 h-3.5 text-gray-400" />
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Steps</span>
                   </div>
-                  {mod.steps.map((step) => (
-                    <StepRow
-                      key={step.id}
-                      step={step}
-                      moduleId={mod.id}
-                      onStepUpdated={onStepUpdated}
-                      onStepDeleted={onStepDeleted}
-                      onBlockAdded={onBlockAdded}
-                      onBlockUpdated={onBlockUpdated}
-                      onBlockDeleted={onBlockDeleted}
-                    />
-                  ))}
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onStepsReorder?.(mod.id, e)}>
+                    <SortableContext items={mod.steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      {mod.steps.map((step) => (
+                        <SortableStepRow
+                          key={step.id}
+                          step={step}
+                          moduleId={mod.id}
+                          sensors={sensors}
+                          onStepUpdated={onStepUpdated}
+                          onStepDeleted={onStepDeleted}
+                          onBlockAdded={onBlockAdded}
+                          onBlockUpdated={onBlockUpdated}
+                          onBlockDeleted={onBlockDeleted}
+                          onBlocksReorder={onBlocksReorder}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
               )}
               <div className="pl-4">
@@ -817,15 +999,57 @@ function ModuleCard({ module: mod, displayIndex, templateId, onModuleUpdated, on
   );
 }
 
-// ─── Step Row (collapsible) ─────────────────────────────────────────────
-function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted }: {
+// ─── Sortable Step Row wrapper ──────────────────────────────────────────
+function SortableStepRow(props: {
   step: Step;
   moduleId: string;
+  sensors?: ReturnType<typeof useSensors>;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
+  onBlocksReorder?: (moduleId: string, stepId: string, event: DragEndEvent) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.step.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <StepRow
+        {...props}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ─── Step Row (collapsible) ─────────────────────────────────────────────
+function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted, onBlocksReorder }: {
+  step: Step;
+  moduleId: string;
+  dragHandleProps?: Record<string, unknown>;
+  sensors?: ReturnType<typeof useSensors>;
+  onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
+  onStepDeleted: (moduleId: string, stepId: string) => void;
+  onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
+  onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
+  onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
+  onBlocksReorder?: (moduleId: string, stepId: string, event: DragEndEvent) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -885,6 +1109,15 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
     <div className="border border-gray-200 rounded-lg mb-3 bg-white shadow-sm hover:shadow-md transition-shadow border-l-[3px] border-l-brand-300">
       {/* Step header */}
       <div className="px-3 py-2.5 flex items-center justify-between">
+        {dragHandleProps && (
+          <button
+            className="cursor-grab active:cursor-grabbing p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors shrink-0 touch-none"
+            title="Drag to reorder"
+            {...dragHandleProps}
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2.5 text-left flex-1 min-w-0"
@@ -965,16 +1198,20 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
             {step.prompt_blocks.length === 0 ? (
               <p className="text-xs text-gray-400 italic">No prompt blocks.</p>
             ) : (
-              step.prompt_blocks.map((block) => (
-                <PromptBlockRow
-                  key={block.id}
-                  block={block}
-                  moduleId={moduleId}
-                  stepId={step.id}
-                  onBlockUpdated={onBlockUpdated}
-                  onBlockDeleted={onBlockDeleted}
-                />
-              ))
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onBlocksReorder?.(moduleId, step.id, e)}>
+                <SortableContext items={step.prompt_blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                  {step.prompt_blocks.map((block) => (
+                    <SortablePromptBlockRow
+                      key={block.id}
+                      block={block}
+                      moduleId={moduleId}
+                      stepId={step.id}
+                      onBlockUpdated={onBlockUpdated}
+                      onBlockDeleted={onBlockDeleted}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
             <AddPromptBlockButton stepId={step.id} currentCount={step.prompt_blocks.length} onAdded={(newBlock) => onBlockAdded(moduleId, step.id, newBlock)} />
           </div>
@@ -1056,11 +1293,47 @@ function StepRow({ step, moduleId, onStepUpdated, onStepDeleted, onBlockAdded, o
   );
 }
 
-// ─── Prompt Block Row ───────────────────────────────────────────────────
-function PromptBlockRow({ block, moduleId, stepId, onBlockUpdated, onBlockDeleted }: {
+// ─── Sortable Prompt Block Row wrapper ──────────────────────────────────
+function SortablePromptBlockRow(props: {
   block: PromptBlock;
   moduleId: string;
   stepId: string;
+  onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
+  onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.block.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <PromptBlockRow
+        {...props}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ─── Prompt Block Row ───────────────────────────────────────────────────
+function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockUpdated, onBlockDeleted }: {
+  block: PromptBlock;
+  moduleId: string;
+  stepId: string;
+  dragHandleProps?: Record<string, unknown>;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
 }) {
@@ -1112,6 +1385,15 @@ function PromptBlockRow({ block, moduleId, stepId, onBlockUpdated, onBlockDelete
   return (
     <div className="border border-gray-100 rounded-lg p-2.5 bg-gray-50/60 border-l-[3px] border-l-blue-200">
       <div className="flex items-start justify-between">
+        {dragHandleProps && (
+          <button
+            className="cursor-grab active:cursor-grabbing p-0.5 mt-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors shrink-0 touch-none"
+            title="Drag to reorder"
+            {...dragHandleProps}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <MessageSquareText className="w-3.5 h-3.5 text-blue-500 shrink-0" />

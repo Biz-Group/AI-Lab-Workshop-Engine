@@ -43,6 +43,6 @@ export const config = {
      * - public files (public folder)
      * - api routes that handle their own auth (skip middleware auth.getUser() overhead)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/analytics|api/questions|api/submissions|api/feedback|api/sessions/join|api/sessions/verify|api/pdf|api/email|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/analytics|api/questions|api/submissions|api/feedback|api/sessions/join|api/sessions/verify|api/pdf|api/email|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

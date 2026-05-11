@@ -4,6 +4,8 @@ import { NextRequest } from 'next/server';
 const createServiceClientMock = vi.fn();
 const requireParticipantSessionMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
+const renderPromptPackPdfMock = vi.fn();
+const sendPromptPackViaWebhookMock = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: createServiceClientMock,
@@ -17,11 +19,12 @@ vi.mock('@/lib/server/prompt-pack', () => ({
   buildPromptPackData: buildPromptPackDataMock,
 }));
 
-const sendMailMock = vi.fn(
-  async (_options: { to: string; html: string }) => ({ messageId: 'msg-1' })
-);
-vi.mock('nodemailer', () => ({
-  createTransport: vi.fn(() => ({ sendMail: sendMailMock })),
+vi.mock('@/lib/server/render-pdf', () => ({
+  renderPromptPackPdf: renderPromptPackPdfMock,
+}));
+
+vi.mock('@/lib/server/n8n', () => ({
+  sendPromptPackViaWebhook: sendPromptPackViaWebhookMock,
 }));
 
 function createRequest() {
@@ -42,9 +45,6 @@ function createRequest() {
 describe('POST /api/email/prompt-pack', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env.GMAIL_USER = 'test@gmail.com';
-    process.env.GMAIL_APP_PASSWORD = 'app-password';
-    sendMailMock.mockResolvedValue({ messageId: 'msg-1' });
 
     requireParticipantSessionMock.mockResolvedValue({
       payload: {
@@ -89,13 +89,20 @@ describe('POST /api/email/prompt-pack', () => {
       upsert: vi.fn(async () => ({ error: null })),
     };
 
+    // Fifth call: update prompt_pack_emailed_at
+    const emailedUpdateBuilder = {
+      update: vi.fn(() => emailedUpdateBuilder),
+      eq: vi.fn(() => emailedUpdateBuilder),
+    };
+
     createServiceClientMock.mockResolvedValue({
       from: vi
         .fn()
         .mockImplementationOnce(() => participantBuilder)
         .mockImplementationOnce(() => participantUpdateBuilder)
         .mockImplementationOnce(() => sessionBuilder)
-        .mockImplementationOnce(() => leadsBuilder),
+        .mockImplementationOnce(() => leadsBuilder)
+        .mockImplementationOnce(() => emailedUpdateBuilder),
     });
 
     buildPromptPackDataMock.mockResolvedValue({
@@ -103,20 +110,15 @@ describe('POST /api/email/prompt-pack', () => {
       sessionDate: '04/10/2026',
       organizationName: 'Biz Group',
       workshopName: 'Prompt Lab',
-      entries: [
-        {
-          moduleTitle: 'Discovery',
-          stepTitle: 'Persona Prompt',
-          stepInstructions: { actions: 'Describe your audience' },
-          promptBlocks: [{ title: 'Starter Prompt', content: 'Act as...', isCopyable: true }],
-          participantResponse: { content: 'Audience draft', imageUrl: null, submittedAt: null, updatedAt: null },
-        },
-      ],
+      entries: [],
       takeaways: [],
     });
+
+    renderPromptPackPdfMock.mockResolvedValue(Buffer.from('fake-pdf-content'));
+    sendPromptPackViaWebhookMock.mockResolvedValue({ success: true });
   });
 
-  it('reuses the shared prompt-pack builder for email content', async () => {
+  it('generates PDF and sends via n8n webhook', async () => {
     const { POST } = await import('@/app/api/email/prompt-pack/route');
     const response = await POST(createRequest());
     const data = await response.json();
@@ -127,11 +129,60 @@ describe('POST /api/email/prompt-pack', () => {
       '11111111-1111-1111-1111-111111111111',
       '22222222-2222-2222-2222-222222222222'
     );
-    expect(sendMailMock).toHaveBeenCalledTimes(1);
-    const mailOptions = sendMailMock.mock.calls[0]![0];
-    expect(mailOptions.to).toBe('alex@example.com');
-    expect(mailOptions.html).toContain('Activity Instructions');
-    expect(mailOptions.html).toContain('What To Do');
-    expect(mailOptions.html).toContain('Describe your audience');
+    expect(renderPromptPackPdfMock).toHaveBeenCalledTimes(1);
+    expect(sendPromptPackViaWebhookMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'alex@example.com',
+        participantName: 'Alex',
+        workshopName: 'Prompt Lab',
+        organizationName: 'Biz Group',
+        filename: 'prompt-pack-alex.pdf',
+      })
+    );
+    // Verify pdfBase64 is passed
+    const webhookCall = sendPromptPackViaWebhookMock.mock.calls[0][0];
+    expect(webhookCall.pdfBase64).toBe(Buffer.from('fake-pdf-content').toString('base64'));
+  });
+
+  it('returns 502 when n8n webhook fails', async () => {
+    sendPromptPackViaWebhookMock.mockResolvedValue({
+      success: false,
+      error: 'n8n webhook returned 500',
+    });
+
+    const { POST } = await import('@/app/api/email/prompt-pack/route');
+    const response = await POST(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(data.success).toBe(false);
+    expect(data.error).toContain('n8n webhook returned 500');
+  });
+
+  it('returns 403 if feedback not submitted', async () => {
+    const participantBuilder = {
+      select: vi.fn(() => participantBuilder),
+      eq: vi.fn(() => participantBuilder),
+      single: vi.fn(async () => ({
+        data: {
+          id: '22222222-2222-2222-2222-222222222222',
+          display_name: 'Alex',
+          session_id: '11111111-1111-1111-1111-111111111111',
+          feedback_submitted: false,
+        },
+        error: null,
+      })),
+    };
+
+    createServiceClientMock.mockResolvedValue({
+      from: vi.fn().mockImplementationOnce(() => participantBuilder),
+    });
+
+    const { POST } = await import('@/app/api/email/prompt-pack/route');
+    const response = await POST(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
   });
 });

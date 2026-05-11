@@ -31,6 +31,9 @@ const reactPdfIncludePatterns = [...reactPdfDeps].map(
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: __dirname,
+  },
   serverExternalPackages: ['@react-pdf/renderer'],
   experimental: {
     serverActions: {

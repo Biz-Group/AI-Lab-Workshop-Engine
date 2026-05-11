@@ -293,6 +293,7 @@ export interface Participant {
   joined_at: string;
   last_seen_at: string;
   current_step_id: string | null;
+  prompt_pack_emailed_at: string | null;
 }
 
 export interface ParticipantInsert {
@@ -309,6 +310,7 @@ export interface ParticipantUpdate {
   email?: string | null;
   email_consent?: boolean;
   marketing_consent?: boolean;
+  prompt_pack_emailed_at?: string | null;
 }
 
 // ============================================================================
