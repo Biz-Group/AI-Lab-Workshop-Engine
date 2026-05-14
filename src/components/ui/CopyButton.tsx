@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { cn, copyToClipboard } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -76,17 +76,27 @@ export function PromptBlock({
   className,
   onCopy 
 }: PromptBlockProps) {
+  const [isExpanded, setIsExpanded] = React.useState(true);
+
   return (
     <div className={cn('rounded-lg border border-gray-200 overflow-hidden', className)}>
       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-        <span className="text-sm font-medium text-gray-900">{title}</span>
+        <button
+          onClick={() => setIsExpanded(e => !e)}
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-900 hover:text-gray-700 transition-colors"
+        >
+          {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+          {title}
+        </button>
         {isCopyable && <CopyButton text={content} onCopy={onCopy} />}
       </div>
-      <div className="p-4 bg-white">
-        <pre className="whitespace-pre-wrap font-mono text-sm text-gray-900 leading-relaxed">
-          {content}
-        </pre>
-      </div>
+      {isExpanded && (
+        <div className="p-4 bg-white">
+          <pre className="whitespace-pre-wrap font-mono text-sm text-gray-900 leading-relaxed">
+            {content}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

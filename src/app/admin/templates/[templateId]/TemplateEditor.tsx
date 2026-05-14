@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useId, useEffect } from 'react';
 import {
   Save,
   Pencil,
@@ -19,6 +19,10 @@ import {
   ExternalLink,
   BookOpen,
   BookmarkPlus,
+  Copy,
+  Search,
+  ChevronsUpDown,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { Card, CardContent, Button, Input, TextArea, Modal, ConfirmModal } from '@/components/ui';
 import { TemplatePreview } from './TemplatePreview';
@@ -105,6 +109,39 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
   const [isToggling, setIsToggling] = useState(false);
   const [editingMeta, setEditingMeta] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+  const [expandedModuleIds, setExpandedModuleIds] = useState<Set<string>>(() => new Set(initialTemplate.modules.map(m => m.id)));
+
+  const totalDuration = useMemo(() =>
+    template.modules.reduce((sum, m) => sum + m.steps.reduce((ss, s) => ss + (s.estimated_minutes ?? 0), 0), 0),
+    [template.modules]
+  );
+  const durationDrift = template.estimated_duration_minutes - totalDuration;
+
+  const filteredModules = useMemo(() => {
+    if (!searchFilter.trim()) return template.modules;
+    const q = searchFilter.toLowerCase();
+    return template.modules.filter(m =>
+      m.title.toLowerCase().includes(q) ||
+      m.objective?.toLowerCase().includes(q) ||
+      m.steps.some(s => s.title.toLowerCase().includes(q))
+    );
+  }, [template.modules, searchFilter]);
+
+  const allExpanded = expandedModuleIds.size >= template.modules.length;
+  const toggleExpandAll = useCallback(() => {
+    setExpandedModuleIds(prev =>
+      prev.size >= template.modules.length ? new Set() : new Set(template.modules.map(m => m.id))
+    );
+  }, [template.modules]);
+  const toggleModuleExpand = useCallback((moduleId: string) => {
+    setExpandedModuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(moduleId)) next.delete(moduleId);
+      else next.add(moduleId);
+      return next;
+    });
+  }, []);
 
   // Template metadata form state
   const [metaForm, setMetaForm] = useState({
@@ -161,6 +198,7 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
       ...prev,
       modules: [...prev.modules, { ...newModule, steps: newModule.steps ?? [] }],
     }));
+    setExpandedModuleIds(prev => new Set([...prev, newModule.id]));
   }, []);
 
   const handleModuleUpdated = useCallback((moduleId: string, updates: Partial<Module>) => {
@@ -177,12 +215,12 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     }));
   }, []);
 
-  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => {
+  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => {
     setTemplate(prev => ({
       ...prev,
       modules: prev.modules.map(m =>
         m.id === moduleId
-          ? { ...m, steps: [...m.steps, { ...newStep, prompt_blocks: [] }] }
+          ? { ...m, steps: [...m.steps, { ...newStep, prompt_blocks: newStep.prompt_blocks ?? [] }] }
           : m
       ),
     }));
@@ -269,6 +307,9 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+  const dndId = useId();
+  const [dndMounted, setDndMounted] = useState(false);
+  useEffect(() => { setDndMounted(true); }, []);
 
   const handleModulesReorder = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -342,6 +383,34 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
         };
       }),
     }));
+  }, []);
+
+  const handleStepMoved = useCallback(async (stepId: string, sourceModuleId: string, targetModuleId: string) => {
+    try {
+      const res = await fetch('/api/admin/move-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step_id: stepId, target_module_id: targetModuleId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      setTemplate(prev => {
+        const sourceModule = prev.modules.find(m => m.id === sourceModuleId);
+        const step = sourceModule?.steps.find(s => s.id === stepId);
+        if (!step) return prev;
+        return {
+          ...prev,
+          modules: prev.modules.map(m => {
+            if (m.id === sourceModuleId) return { ...m, steps: m.steps.filter(s => s.id !== stepId) };
+            if (m.id === targetModuleId) return { ...m, steps: [...m.steps, { ...step, order_index: m.steps.length }] };
+            return m;
+          }),
+        };
+      });
+      toast.success('Step moved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to move step');
+    }
   }, []);
 
   return (
@@ -452,7 +521,36 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
 
       {/* Modules */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Activities</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-lg font-semibold text-gray-900">Activities</h2>
+          <div className="flex items-center gap-2">
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+              Math.abs(durationDrift) <= 5 ? 'bg-green-50 text-green-700' :
+              durationDrift > 0 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'
+            }`}>
+              <Clock className="w-3.5 h-3.5" />
+              <span>{totalDuration}m</span>
+              <span className="text-xs opacity-75">/ {template.estimated_duration_minutes}m</span>
+              {durationDrift !== 0 && (
+                <span className="text-xs">({durationDrift > 0 ? '+' : ''}{durationDrift}m)</span>
+              )}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Filter activities\u2026"
+                className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400"
+              />
+            </div>
+            <Button variant="secondary" size="sm" onClick={toggleExpandAll}>
+              <ChevronsUpDown className="w-4 h-4 mr-1" />
+              {allExpanded ? 'Collapse All' : 'Expand All'}
+            </Button>
+          </div>
+        </div>
 
         {template.modules.length === 0 ? (
           <Card>
@@ -461,21 +559,26 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
               <p className="text-gray-600 mb-4">No activities yet. Add your first activity to get started.</p>
             </CardContent>
           </Card>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleModulesReorder}>
-            <SortableContext items={template.modules.map(m => m.id)} strategy={verticalListSortingStrategy}>
-              {template.modules.map((mod, index) => (
+        ) : dndMounted ? (
+          <DndContext id={`${dndId}-modules`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleModulesReorder}>
+            <SortableContext items={filteredModules.map(m => m.id)} strategy={verticalListSortingStrategy}>
+              {filteredModules.map((mod, index) => (
                 <SortableModuleCard
                   key={mod.id}
                   module={mod}
                   displayIndex={index + 1}
                   templateId={template.id}
                   sensors={sensors}
+                  isExpanded={expandedModuleIds.has(mod.id)}
+                  onToggleExpand={() => toggleModuleExpand(mod.id)}
+                  allModules={template.modules}
+                  onModuleAdded={handleModuleAdded}
                   onModuleUpdated={handleModuleUpdated}
                   onModuleDeleted={handleModuleDeleted}
                   onStepAdded={handleStepAdded}
                   onStepUpdated={handleStepUpdated}
                   onStepDeleted={handleStepDeleted}
+                  onStepMoved={handleStepMoved}
                   onBlockAdded={handleBlockAdded}
                   onBlockUpdated={handleBlockUpdated}
                   onBlockDeleted={handleBlockDeleted}
@@ -485,6 +588,12 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
               ))}
             </SortableContext>
           </DndContext>
+        ) : (
+          <div className="space-y-4 animate-pulse">
+            {filteredModules.map((mod) => (
+              <div key={mod.id} className="h-16 bg-gray-100 rounded-xl" />
+            ))}
+          </div>
         )}
 
         <AddModuleButton templateId={template.id} currentCount={template.modules.length} onAdded={handleModuleAdded} />
@@ -722,11 +831,16 @@ function SortableModuleCard(props: {
   displayIndex: number;
   templateId: string;
   sensors: ReturnType<typeof useSensors>;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  allModules: Module[];
+  onModuleAdded: (newModule: { id: string; title: string; objective: string | null; order_index: number; steps?: Step[] }) => void;
   onModuleUpdated: (moduleId: string, updates: Partial<Module>) => void;
   onModuleDeleted: (moduleId: string) => void;
-  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
+  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => void;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
+  onStepMoved: (stepId: string, sourceModuleId: string, targetModuleId: string) => Promise<void>;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
@@ -761,30 +875,57 @@ function SortableModuleCard(props: {
 }
 
 // ─── Module Card (collapsible) ──────────────────────────────────────────
-function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, sensors, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
+function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, sensors, isExpanded, onToggleExpand, allModules, onModuleAdded, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
   module: Module;
   displayIndex: number;
   templateId: string;
   dragHandleProps?: Record<string, unknown>;
   sensors?: ReturnType<typeof useSensors>;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  allModules?: Module[];
+  onModuleAdded?: (newModule: { id: string; title: string; objective: string | null; order_index: number; steps?: Step[] }) => void;
   onModuleUpdated: (moduleId: string, updates: Partial<Module>) => void;
   onModuleDeleted: (moduleId: string) => void;
-  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
+  onStepAdded: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => void;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
+  onStepMoved?: (stepId: string, sourceModuleId: string, targetModuleId: string) => Promise<void>;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
   onStepsReorder?: (moduleId: string, event: DragEndEvent) => void;
   onBlocksReorder?: (moduleId: string, stepId: string, event: DragEndEvent) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [localExpanded, setLocalExpanded] = useState(true);
+  const expanded = isExpanded ?? localExpanded;
+  const handleToggle = onToggleExpand ?? (() => setLocalExpanded(e => !e));
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [editForm, setEditForm] = useState({ title: mod.title, objective: mod.objective || '' });
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+
+  const handleDuplicate = async () => {
+    setIsDuplicating(true);
+    try {
+      const res = await fetch('/api/admin/duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'module', module_id: mod.id }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success('Activity duplicated');
+      onModuleAdded?.({ ...data.data, steps: data.data.steps || [] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -857,10 +998,10 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
             </button>
           )}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={handleToggle}
             className="flex items-center gap-3 text-left flex-1 min-w-0"
           >
-            {isExpanded ? (
+            {expanded ? (
               <ChevronDown className="w-5 h-5 text-gray-400 shrink-0" />
             ) : (
               <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
@@ -902,6 +1043,14 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
               <BookmarkPlus className="w-3.5 h-3.5" />
             </button>
             <button
+              onClick={handleDuplicate}
+              disabled={isDuplicating}
+              className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors disabled:opacity-50"
+              title="Duplicate activity"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => {
                 setEditForm({ title: mod.title, objective: mod.objective || '' });
                 setIsEditing(true);
@@ -922,7 +1071,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
         </div>
 
         {/* Expanded Content */}
-        {isExpanded && (
+        {expanded && (
           <div className="px-4 pb-4">
             <div className="border-t border-gray-200 pt-4">
               {mod.steps.length === 0 ? (
@@ -933,7 +1082,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
                     <ListChecks className="w-3.5 h-3.5 text-gray-400" />
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Steps</span>
                   </div>
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onStepsReorder?.(mod.id, e)}>
+                  <DndContext id={`dnd-steps-${mod.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onStepsReorder?.(mod.id, e)}>
                     <SortableContext items={mod.steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
                       {mod.steps.map((step) => (
                         <SortableStepRow
@@ -941,8 +1090,11 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
                           step={step}
                           moduleId={mod.id}
                           sensors={sensors}
+                          allModules={allModules}
+                          onStepAdded={onStepAdded}
                           onStepUpdated={onStepUpdated}
                           onStepDeleted={onStepDeleted}
+                          onStepMoved={onStepMoved}
                           onBlockAdded={onBlockAdded}
                           onBlockUpdated={onBlockUpdated}
                           onBlockDeleted={onBlockDeleted}
@@ -1004,8 +1156,11 @@ function SortableStepRow(props: {
   step: Step;
   moduleId: string;
   sensors?: ReturnType<typeof useSensors>;
+  allModules?: Module[];
+  onStepAdded?: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => void;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
+  onStepMoved?: (stepId: string, sourceModuleId: string, targetModuleId: string) => Promise<void>;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
@@ -1039,13 +1194,16 @@ function SortableStepRow(props: {
 }
 
 // ─── Step Row (collapsible) ─────────────────────────────────────────────
-function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onStepDeleted, onBlockAdded, onBlockUpdated, onBlockDeleted, onBlocksReorder }: {
+function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onBlocksReorder }: {
   step: Step;
   moduleId: string;
   dragHandleProps?: Record<string, unknown>;
   sensors?: ReturnType<typeof useSensors>;
+  allModules?: Module[];
+  onStepAdded?: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => void;
   onStepUpdated: (moduleId: string, stepId: string, updates: Partial<Step>) => void;
   onStepDeleted: (moduleId: string, stepId: string) => void;
+  onStepMoved?: (stepId: string, sourceModuleId: string, targetModuleId: string) => Promise<void>;
   onBlockAdded: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
@@ -1064,6 +1222,40 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onSt
     ai_tool_url: step.ai_tool_url || '',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [isMoving, setIsMoving] = useState(false);
+
+  const handleDuplicate = async () => {
+    setIsDuplicating(true);
+    try {
+      const res = await fetch('/api/admin/duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'step', step_id: step.id, target_module_id: moduleId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success('Step duplicated');
+      onStepAdded?.(moduleId, data.data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
+  const handleMove = async (targetModuleId: string) => {
+    setIsMoving(true);
+    try {
+      await onStepMoved?.(step.id, moduleId, targetModuleId);
+      setShowMoveMenu(false);
+    } catch {
+      // error handled in parent
+    } finally {
+      setIsMoving(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -1146,6 +1338,40 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onSt
         <div className="flex items-center gap-1.5 ml-2">
           <span className="text-xs text-gray-400">{step.prompt_blocks.length} block{step.prompt_blocks.length !== 1 ? 's' : ''}</span>
           <button
+            onClick={handleDuplicate}
+            disabled={isDuplicating}
+            className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded disabled:opacity-50"
+            title="Duplicate step"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+          {allModules && allModules.length > 1 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowMoveMenu(!showMoveMenu)}
+                className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded"
+                title="Move to another activity"
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+              </button>
+              {showMoveMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[180px]">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase">Move to…</div>
+                  {allModules.filter(m => m.id !== moduleId).map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => handleMove(m.id)}
+                      disabled={isMoving}
+                      className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+                    >
+                      {m.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button
             onClick={() => {
               setEditForm({
                 title: step.title,
@@ -1198,7 +1424,7 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onSt
             {step.prompt_blocks.length === 0 ? (
               <p className="text-xs text-gray-400 italic">No prompt blocks.</p>
             ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onBlocksReorder?.(moduleId, step.id, e)}>
+              <DndContext id={`dnd-blocks-${step.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onBlocksReorder?.(moduleId, step.id, e)}>
                 <SortableContext items={step.prompt_blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                   {step.prompt_blocks.map((block) => (
                     <SortablePromptBlockRow
@@ -1206,6 +1432,7 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, onStepUpdated, onSt
                       block={block}
                       moduleId={moduleId}
                       stepId={step.id}
+                      onBlockAdded={onBlockAdded}
                       onBlockUpdated={onBlockUpdated}
                       onBlockDeleted={onBlockDeleted}
                     />
@@ -1298,6 +1525,7 @@ function SortablePromptBlockRow(props: {
   block: PromptBlock;
   moduleId: string;
   stepId: string;
+  onBlockAdded?: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
 }) {
@@ -1329,23 +1557,44 @@ function SortablePromptBlockRow(props: {
 }
 
 // ─── Prompt Block Row ───────────────────────────────────────────────────
-function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockUpdated, onBlockDeleted }: {
+function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockAdded, onBlockUpdated, onBlockDeleted }: {
   block: PromptBlock;
   moduleId: string;
   stepId: string;
   dragHandleProps?: Record<string, unknown>;
+  onBlockAdded?: (moduleId: string, stepId: string, newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
   onBlockUpdated: (moduleId: string, stepId: string, blockId: string, updates: Partial<PromptBlock>) => void;
   onBlockDeleted: (moduleId: string, stepId: string, blockId: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [editForm, setEditForm] = useState({
     title: block.title,
     content_markdown: block.content_markdown,
     is_copyable: block.is_copyable,
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleDuplicate = async () => {
+    setIsDuplicating(true);
+    try {
+      const res = await fetch('/api/admin/duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'prompt_block', block_id: block.id, target_step_id: stepId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success('Block duplicated');
+      onBlockAdded?.(moduleId, stepId, data.data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -1407,6 +1656,14 @@ function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockUpdat
           </p>
         </div>
         <div className="flex items-center gap-1 ml-2 shrink-0">
+          <button
+            onClick={handleDuplicate}
+            disabled={isDuplicating}
+            className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded disabled:opacity-50"
+            title="Duplicate block"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
           <button
             onClick={() => {
               setEditForm({

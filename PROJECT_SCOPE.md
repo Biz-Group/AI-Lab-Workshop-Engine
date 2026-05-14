@@ -1,19 +1,19 @@
 # AI Workshop Runner — Project Scope Document
 
 **Project Name:** AI Workshop Runner  
-**Version:** 2.0.0  
-**Last Updated:** April 13, 2026  
+**Version:** 2.1.0  
+**Last Updated:** May 14, 2026  
 **Status:** Production-Ready (Active Development)
 
 ---
 
 ## 📋 Executive Summary
 
-AI Workshop Runner is a production-ready web platform for facilitating live, interactive AI workshops. Facilitators guide participants through structured prompt engineering exercises with real-time session control, progress tracking, Q&A, feedback collection, and automated deliverable distribution (email + PDF prompt packs). The platform supports multi-organization tenancy, an activity library for reusable content, per-step AI tool configuration, submission galleries with image uploads, and CRM-style client management.
+AI Workshop Runner is a production-ready web platform for facilitating live, interactive AI workshops. Facilitators guide participants through structured prompt engineering exercises with real-time session control, progress tracking, Q&A, feedback collection, and automated deliverable distribution (email + PDF prompt packs). The platform supports multi-organization tenancy, an activity library for reusable content, per-step AI tool configuration, submission galleries with image uploads, CRM-style client management, and a full-featured drag-and-drop template editor.
 
 ### Core Value Proposition
-- **For Facilitators**: Full real-time workshop control—navigation, timers, participant monitoring, Q&A, submission galleries, and analytics export
-- **For Participants**: Frictionless code-based joining, self-paced navigation, structured prompt building, feedback, and personalized prompt pack delivery
+- **For Facilitators**: Full real-time workshop control—navigation, timers, participant monitoring, Q&A, submission galleries, drag-and-drop template editing, session resync, and analytics export
+- **For Participants**: Frictionless code-based joining, self-paced navigation, structured prompt building with collapsible blocks, feedback, and personalized prompt pack delivery
 - **For Organizations**: Lead capture, approved client lists, reusable activity libraries, and session analytics
 
 ---
@@ -104,12 +104,13 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 | **Auth** | Dual system | Supabase Auth (facilitators) + Custom JWT (participants) |
 | **Real-time** | Supabase Realtime | `postgres_changes` subscriptions |
 | **Storage** | Supabase Storage | Submission images, prompt pack PDFs, org logos |
-| **Email** | Resend | Prompt pack HTML delivery |
+| **Email** | Resend + Nodemailer | Prompt pack HTML delivery |
 | **PDF** | @react-pdf/renderer | Server-side prompt pack PDF generation |
+| **Drag & Drop** | @dnd-kit/core + @dnd-kit/sortable | Template editor reordering |
 | **QR Codes** | qrcode.react | Join code QR display |
 | **Validation** | Zod | Request body validation in API routes |
-| **Hosting** | Vercel (recommended) | Edge runtime, serverless functions |
-| **Testing** | Vitest + Testing Library | jsdom environment, 10 test files |
+| **Hosting** | Vercel | Edge runtime, serverless functions |
+| **Testing** | Vitest + Testing Library | jsdom environment, 11 test files |
 | **Notifications** | react-hot-toast | Client-side toast messages |
 
 ### Two Auth Systems
@@ -135,7 +136,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 
 ## 📐 Database Schema
 
-### 19 Migrations (`supabase/migrations/001–019`)
+### 22 Migrations (`supabase/migrations/001–022`)
 
 | # | Name | Purpose |
 |---|------|---------|
@@ -160,6 +161,9 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 | 017 | Backfill Library Steps | Copy existing steps/blocks into library tables |
 | 018 | Approved Clients | `approved_clients` table, `poc_email` on sessions |
 | 019 | POC Fields | `poc_name`, `poc_email` on approved_clients, sample data |
+| 020 | Leads Unique Constraint | Unique index `(organization_id, email)` on leads; fix `idx_leads_session_id` |
+| 021 | Harden Attendee RLS | Remove broad anon RLS policies; force attendee access through JWT-protected API routes |
+| 022 | Prompt Pack Email Queue | `prompt_pack_emailed_at` on participants; index for delayed-send polling |
 
 ### Tables (22 total)
 
@@ -186,7 +190,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - `session_snapshot_prompt_blocks` — session_id, snapshot_step_id, original_block_id, title, content_markdown, content_markdown_raw, order_index, is_copyable
 
 **Participant Data:**
-- `participants` — session_id, display_name, email, email_consent, marketing_consent, joined_at, last_seen_at, current_step_id, facilitator_notes
+- `participants` — session_id, display_name, email, email_consent, marketing_consent, joined_at, last_seen_at, current_step_id, facilitator_notes, prompt_pack_emailed_at
 - `submissions` — participant_id, session_id, step_id, content, image_url, created_at, updated_at (upsert per step)
 - `votes` — participant_id, submission_id
 
@@ -218,13 +222,20 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - **Middleware Protection:** Guards `/admin/*` and `/session/*/presenter` via `sb-*-auth-token` cookie detection
 - **Rate Limiting:** In-memory sliding window per endpoint (join: 10/min, submissions: 20/min, analytics: 60/min, feedback: 5/min)
 
-### 2. Template Management (Full CRUD)
+### 2. Template Management (Full CRUD + Advanced Editor)
 - Create, read, update, delete workshop templates
 - Nested module → step → prompt block hierarchy
+- **Drag-and-drop reordering** of modules, steps, and prompt blocks via `@dnd-kit`
+- **Collapse/expand all** modules and steps for navigation
+- **Search/filter** across modules and steps by title/content
+- **Duration calculator** with total estimated time
+- **Duplicate** templates, modules, steps, or prompt blocks (deep copy)
+- **Move step between modules** with order preservation
 - Per-template AI tool configuration (default: ChatGPT)
 - Per-step AI tool override (e.g., different AI tool per exercise)
 - Variable substitution placeholders: `{ORG_NAME}`, `{INDUSTRY}`, `{TONE_NOTES}`, `{USE_CASE_1}`–`{USE_CASE_5}`
 - Full admin UI at `/admin/templates` with inline editing
+- Template preview mode
 
 ### 3. Activity Library
 - Organization-wide reusable module collection
@@ -235,12 +246,14 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 
 ### 4. Session Management
 - **Session Creation:** Generate from template with snapshot copy of all content
+- **Session Resync:** Re-sync draft/published sessions to latest template content (preserves current_step_id mapping)
 - **Join Code System:** 4-character alphanumeric codes (safe charset excluding I, O, 0, 1) or two-word format
 - **Status Flow:** draft → published → live → ended
 - **Event Metadata:** client_name, department, location, poc_name, poc_email, event_type, event_date
 - **Approved Clients:** Pre-configured client list per organization
 - **QR Code:** Modal with scannable join link
 - **Real-time Sync:** All state changes broadcast via Supabase Realtime
+- **Facilitator Preview:** Generate preview JWT so facilitators can test the participant view
 
 ### 5. Presenter Mode (Facilitator View)
 - **Step Navigation:** Previous/Next controls with module awareness
@@ -252,12 +265,14 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
   - Q&A queue with answer functionality
   - Facilitator notes per participant
 - **Submission Gallery:** View all participant submissions for current step
+- **Preview as Attendee:** Opens participant view with auto-generated JWT (works on production/Vercel)
 - **Session Control:** End session with participant notification
+- **Connection Status:** Visual Wifi/WifiOff indicator for Realtime connection
 
 ### 6. Workshop Runner (Participant View)
 - **Self-Paced Navigation:** Participants freely navigate steps (no forced locking)
 - **Narrative Step Sections:** Parsed instruction markdown into objective, actions, deliverable, checklist, tips, success signals, reflection, next-up sections
-- **Prompt Blocks:** Interactive copyable blocks with clipboard feedback
+- **Prompt Blocks:** Interactive collapsible blocks with clipboard copy and expand/collapse toggle
 - **Submissions:** Text content and image upload per step
 - **Stuck Signal:** Request help button
 - **Q&A:** Ask questions during session
@@ -339,18 +354,20 @@ Facilitator (Supabase Auth Protected):
   /session/[sessionId]/gallery   → Submission gallery view
 ```
 
-### API Routes (31 endpoints)
+### API Routes (37 endpoints)
 
 **Participant Routes** (Custom JWT Auth):
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | POST | `/api/sessions/join` | Join/resume session, generate JWT |
 | POST | `/api/sessions/verify` | Verify join code validity |
+| GET | `/api/sessions/state` | Get current session state |
 | POST | `/api/submissions` | Upsert text/image submission per step |
 | POST | `/api/submissions/upload` | Upload submission image to storage |
 | POST | `/api/analytics/event` | Track user events (rate limited: 60/min) |
 | POST | `/api/feedback` | Submit session feedback (1–5 rating) |
-| POST | `/api/questions` | Submit Q&A question |
+| GET/POST | `/api/questions` | List or submit Q&A questions |
+| PATCH/DELETE | `/api/questions/[questionId]` | Update or delete question |
 | POST | `/api/pdf/generate` | Generate prompt pack PDF |
 | POST | `/api/email/prompt-pack` | Email prompt pack HTML |
 
@@ -365,13 +382,26 @@ Facilitator (Supabase Auth Protected):
 | PATCH/DELETE | `/api/admin/steps/[stepId]` | Update or delete step |
 | POST | `/api/admin/prompt-blocks` | Create prompt block |
 | PATCH/DELETE | `/api/admin/prompt-blocks/[blockId]` | Update or delete prompt block |
+| POST | `/api/admin/reorder` | Reorder modules, steps, or prompt blocks (order_index) |
+| POST | `/api/admin/duplicate` | Deep-duplicate template, module, step, or block |
+| POST | `/api/admin/move-step` | Move step between modules |
 | POST | `/api/admin/sessions` | Create session from template |
 | PATCH/DELETE | `/api/admin/sessions/[sessionId]` | Update or end session |
+| POST | `/api/admin/sessions/[sessionId]/resync` | Re-sync session snapshots to current template |
+| POST | `/api/admin/sessions/[sessionId]/preview-token` | Generate facilitator preview JWT |
 | GET/PATCH | `/api/admin/participants/[id]/notes` | Facilitator notes per participant |
+| GET | `/api/admin/participants` | List participants for a session |
 | GET/POST | `/api/admin/library` | List or create library activities |
 | POST | `/api/admin/library/insert-into-template` | Copy library activity into template |
 | POST | `/api/admin/library/save-from-template` | Save template module to library |
 | GET/POST | `/api/admin/clients` | List or add approved clients |
+| PATCH/DELETE | `/api/admin/clients/[clientId]` | Update or delete approved client |
+
+**Webhook Routes** (Service-to-service):
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/webhooks/prompt-pack-sent` | n8n callback after email delivery |
+| GET | `/api/webhooks/prompt-pack-due` | Polling endpoint for pending prompt pack deliveries |
 
 All API routes return `{ success: boolean, error?: string, data?: T }` and use Zod for request body validation.
 
@@ -383,15 +413,16 @@ All API routes return `{ success: boolean, error?: string, data?: T }` and use Z
 | Component | Purpose |
 |-----------|---------|
 | `Button` | Styled action button with variants |
-| `Card` | Card container with `CardContent` |
+| `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` | Card container system |
 | `Checkbox` | Form checkbox |
 | `CopyButton` | Copy-to-clipboard with feedback |
-| `Input` | Text input with label support |
-| `Loading` | Loading spinner |
-| `Modal` | Dialog overlay |
-| `Progress` | Progress bar |
+| `PromptBlock` | Collapsible prompt content with expand/collapse toggle + copy |
+| `Input`, `TextArea` | Form text inputs |
+| `LoadingSpinner`, `LoadingOverlay`, `LoadingCard`, `EmptyState` | Loading and empty states |
+| `Modal`, `ConfirmModal` | Dialog overlays |
+| `ProgressIndicator`, `ProgressBar` | Progress display |
 | `QrCodeModal` | QR code display for join URLs |
-| `Timer` | Countdown timer display |
+| `Timer`, `Countdown` | Countdown timer display |
 
 Barrel export via `src/components/ui/index.ts`.
 
@@ -415,7 +446,7 @@ Barrel export via `src/components/ui/index.ts`.
 ### Presenter Components (`src/components/presenter/`)
 | Component | Purpose |
 |-----------|---------|
-| `PresenterView` | Facilitator live view with all controls |
+| `PresenterView` | Facilitator live view with all controls + preview-as-attendee |
 | `ParticipantList` | Participant list with per-participant progress |
 | `SubmissionGallery` | Gallery view of submissions for current step |
 
@@ -507,16 +538,19 @@ Organization, FacilitatorUser, WorkshopTemplate, Module, ModuleStep, PromptBlock
 
 ### Implemented
 - **RLS Policies:** All 22 tables with row-level security
+- **Hardened Attendee Access:** Anon RLS policies removed (migration 021); participants access data exclusively through JWT-protected API routes using service role
 - **Helper Functions:** `is_facilitator_of_org()`, `is_admin_of_org()`, `get_user_org_ids()`
 - **Service Role Policies:** Explicit full-access for service_role (API backend)
 - **Supabase Auth:** Password login for facilitators
 - **Custom JWT:** HS256 tokens for participants via `jose`
-- **Middleware:** Route guards on `/admin/*` and `/session/*/presenter`
+- **Middleware:** Route guards on `/admin/*` and `/session/*/presenter` via `sb-*-auth-token` cookie detection
+- **Facilitator Preview Token:** Separate JWT generation for facilitator "Preview as Attendee" feature
 - **Rate Limiting:** Per-endpoint sliding window (in-memory)
 - **Zod Validation:** All API request bodies validated
 - **Environment Variables:** Server-only secrets, `NEXT_PUBLIC_` prefix for client
-- **httpOnly Cookies:** Session tokens stored securely
+- **httpOnly Cookies:** Session tokens stored securely (secure flag in production)
 - **Storage Policies:** Bucket-level access control (private prompt-packs, public images)
+- **Unique Constraints:** Leads table `(organization_id, email)` prevents duplicates
 
 ---
 
@@ -542,6 +576,10 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 
 ### Supabase Edge Functions
 - `cleanup-old-sessions` — Periodic cleanup of sessions ended > 72 hours ago (cascade deletes analytics → feedback → submissions → participants → snapshots). Triggered via `pg_cron` with `CRON_SECRET` verification.
+
+### Webhook Integration (n8n)
+- `/api/webhooks/prompt-pack-due` — GET endpoint polled by n8n to find participants eligible for prompt pack delivery
+- `/api/webhooks/prompt-pack-sent` — POST callback from n8n to record successful email delivery timestamp
 
 ---
 
@@ -583,6 +621,20 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 3. Library activities can be copied into other templates
 4. Enables consistent content reuse across workshops
 
+### 6. Session Resync Workflow
+1. Facilitator edits template content (adds/removes modules, steps, blocks)
+2. Navigates to Sessions table, opens dropdown for a draft/published session
+3. Clicks "Resync to Template" — session snapshots are deleted and recreated
+4. System remaps `current_step_id` using `original_step_id` references
+5. **Constraint:** Only available for `draft` or `published` sessions (live/ended sessions have submissions with FK constraints)
+
+### 7. Prompt Pack Email Queue Workflow
+1. Participant submits feedback at session end
+2. System marks participant as eligible for prompt pack delivery (`email_consent` + feedback submitted)
+3. Webhook endpoint `/api/webhooks/prompt-pack-due` returns eligible participants (polled by n8n)
+4. External service (n8n) sends personalized prompt pack emails
+5. n8n calls `/api/webhooks/prompt-pack-sent` to record `prompt_pack_emailed_at` timestamp
+
 ---
 
 ## 📊 Monitoring & Analytics
@@ -614,13 +666,14 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 
 ## 🧪 Testing
 
-### Test Files (10)
+### Test Files (11)
 | File | Coverage |
 |------|----------|
 | `tests/utils.test.ts` | Common utility functions |
 | `tests/api/join-route.test.ts` | Join/resume participant logic |
 | `tests/api/email-prompt-pack-route.test.ts` | Email rendering |
 | `tests/api/pdf-generate-route.test.ts` | PDF generation |
+| `tests/presenter/PresenterConnectionStatus.test.tsx` | Presenter connection status |
 | `tests/workshop/WorkshopRunner.test.tsx` | Main runner component |
 | `tests/workshop/NarrativeProgressMap.test.tsx` | Progress indicator |
 | `tests/workshop/prompt-pack-utils.test.ts` | Prompt pack utilities |
@@ -709,17 +762,24 @@ import { Button, Card, Modal } from '@/components/ui';
 ### Key npm Packages
 | Package | Version | Purpose |
 |---------|---------|---------|
-| next | ^16.1.6 | App framework |
+| next | ^16.2.4 | App framework |
 | @supabase/ssr | ^0.5.1 | Server-side Supabase |
 | @supabase/supabase-js | ^2.45.0 | Supabase client |
+| @dnd-kit/core | ^6.3.1 | Drag-and-drop core |
+| @dnd-kit/sortable | ^10.0.0 | Sortable list primitives |
 | jose | ^5.6.3 | JWT for participant auth |
 | @react-pdf/renderer | ^3.4.4 | PDF generation |
 | zod | ^3.23.8 | Request validation |
 | resend | ^4.0.0 | Email API |
+| nodemailer | ^8.0.5 | SMTP email fallback |
 | qrcode.react | ^4.2.0 | QR code display |
 | react-hot-toast | ^2.4.1 | Toast notifications |
 | lucide-react | ^0.436.0 | Icons |
+| uuid | ^10.0.0 | UUID generation |
+| clsx | ^2.1.1 | Conditional classnames |
+| tailwind-merge | ^2.5.2 | Tailwind class deduplication |
 | vitest | ^4.0.18 | Testing framework |
+| typescript | ^5.5.4 | Type checking |
 
 ---
 
@@ -750,4 +810,4 @@ For a feature to be considered complete:
 
 ---
 
-*This document is a living document and should be updated as the project evolves. Last reviewed: April 13, 2026*
+*This document is a living document and should be updated as the project evolves. Last reviewed: May 14, 2026*

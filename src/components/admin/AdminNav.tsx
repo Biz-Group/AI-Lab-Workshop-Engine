@@ -74,6 +74,7 @@ export function AdminNav({ user }: AdminNavProps) {
                 alt="Biz Group"
                 width={36}
                 height={36}
+                style={{ width: 'auto', height: 'auto' }}
                 className="rounded"
               />
               <span className="text-xl font-bold text-brand-700">Workshop Admin</span>

@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal, ChevronDown, QrCode } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Pencil, Trash2, Copy, MoreHorizontal, ChevronDown, QrCode, RefreshCw, RotateCcw } from 'lucide-react';
 import { Card, Button, Modal, ConfirmModal, Input, QrCodeModal } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -20,6 +20,7 @@ interface SessionRow {
   poc_email: string | null;
   event_type: string | null;
   event_date: string | null;
+  template_id: string;
   template_name: string;
 }
 
@@ -53,6 +54,7 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
   const [deleteSession, setDeleteSession] = useState<SessionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -342,6 +344,64 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
               <Pencil className="w-3.5 h-3.5" />
               Edit Details
             </button>
+            {(() => {
+              const s = sessions.find(x => x.id === openMenuId);
+              if (s && s.status === 'ended') {
+                return (
+                  <button
+                    onClick={async () => {
+                      if (!s) return;
+                      setOpenMenuId(null);
+                      try {
+                        const res = await fetch(`/api/admin/sessions/${s.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'published', ended_at: null })
+                        });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error);
+                        toast.success('Session reopened as published');
+                        router.refresh();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to reopen session');
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reopen Session
+                  </button>
+                );
+              }
+              if (s && (s.status === 'draft' || s.status === 'published')) {
+                return (
+                  <button
+                    onClick={async () => {
+                      if (!s) return;
+                      setSyncingId(s.id);
+                      setOpenMenuId(null);
+                      try {
+                        const res = await fetch(`/api/admin/sessions/${s.id}/resync`, { method: 'POST' });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error);
+                        toast.success('Session resynced to template');
+                        router.refresh();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to resync');
+                      } finally {
+                        setSyncingId(null);
+                      }
+                    }}
+                    disabled={syncingId === s.id}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingId === s.id ? 'animate-spin' : ''}`} />
+                    Resync to Template
+                  </button>
+                );
+              }
+              return null;
+            })()}
             <button
               onClick={() => {
                 const s = sessions.find(x => x.id === openMenuId);

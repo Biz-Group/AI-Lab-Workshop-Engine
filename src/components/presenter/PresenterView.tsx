@@ -527,6 +527,7 @@ export function PresenterView({
             alt="Biz Group"
             width={32}
             height={32}
+            style={{ width: 'auto', height: 'auto' }}
             className="rounded"
           />
           <div>
@@ -835,8 +836,15 @@ export function PresenterView({
               variant="secondary"
               size="sm"
               className="w-full justify-start"
-              onClick={() => {
-                window.open(`/s/${session.id}`, '_blank');
+              onClick={async () => {
+                try {
+                  const res = await fetch(`/api/admin/sessions/${session.id}/preview-token`, { method: 'POST' });
+                  const data = await res.json();
+                  if (!data.success) throw new Error(data.error);
+                  window.open(`/s/${session.id}`, '_blank');
+                } catch {
+                  window.open(`/s/${session.id}`, '_blank');
+                }
               }}
             >
               <ExternalLink className="w-4 h-4 mr-2" />

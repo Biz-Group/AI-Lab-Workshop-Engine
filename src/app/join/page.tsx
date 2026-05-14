@@ -75,6 +75,7 @@ export default function JoinPage() {
                 alt="Biz Group"
                 width={64}
                 height={64}
+                style={{ width: 'auto', height: 'auto' }}
                 className="mx-auto mb-4 rounded-lg"
               />
               <h1 className="text-3xl font-bold text-gray-900 mb-2">

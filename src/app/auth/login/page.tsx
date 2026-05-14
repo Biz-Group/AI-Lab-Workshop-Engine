@@ -95,6 +95,9 @@ function LoginForm() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
         });
 
         if (error) {
@@ -180,6 +183,7 @@ function LoginForm() {
                     alt="Biz Group"
                     width={64}
                     height={64}
+                    style={{ width: 'auto', height: 'auto' }}
                     className="mx-auto mb-4 rounded-lg"
                   />
                   <h1 className="text-2xl font-bold text-gray-900 mb-2">

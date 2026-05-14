@@ -510,6 +510,7 @@ export function WorkshopRunner({
               alt="Biz Group"
               width={32}
               height={32}
+              style={{ width: 'auto', height: 'auto' }}
               className="rounded"
             />
             <h2 className="font-semibold text-gray-900 text-sm">{session.template.name}</h2>

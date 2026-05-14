@@ -61,6 +61,7 @@ export default function HomePage() {
             alt="Biz Group"
             width={36}
             height={36}
+            style={{ width: 'auto', height: 'auto' }}
             className="rounded-lg"
           />
           <span className="text-xl font-bold text-gray-900">{appName}</span>

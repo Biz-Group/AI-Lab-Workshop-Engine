@@ -34,6 +34,7 @@ export default async function SessionsPage() {
       poc_email,
       event_type,
       event_date,
+      template_id,
       template:workshop_templates(name)
     `)
     .eq('organization_id', orgId || '')
@@ -60,6 +61,7 @@ export default async function SessionsPage() {
     poc_email: s.poc_email as string | null,
     event_type: s.event_type as string | null,
     event_date: s.event_date as string | null,
+    template_id: s.template_id as string,
     template_name: getJoinField(s.template, 'name') as string || 'Unknown Template',
   }));
 
