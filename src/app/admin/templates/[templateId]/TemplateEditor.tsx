@@ -541,7 +541,7 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Filter activities\u2026"
+                placeholder="Enter keyword"
                 className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400"
               />
             </div>
