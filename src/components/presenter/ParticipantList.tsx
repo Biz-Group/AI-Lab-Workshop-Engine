@@ -1,19 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase';
 import {
   Users,
   Search,
   CheckCircle,
-  Circle,
   AlertTriangle,
-  Clock,
   ChevronDown,
   ChevronUp,
-  Wifi,
-  WifiOff,
   StickyNote,
   X,
 } from 'lucide-react';
@@ -41,9 +37,8 @@ interface ParticipantListProps {
 type SortOption = 'name' | 'progress' | 'recent';
 type FilterOption = 'all' | 'stuck' | 'active' | 'completed';
 
-export function ParticipantList({
+export const ParticipantList = memo(function ParticipantList({
   sessionId,
-  allStepIds,
   totalSteps,
   className,
 }: ParticipantListProps) {
@@ -86,24 +81,30 @@ export function ParticipantList({
       .eq('event_type', 'stuck_signal')
       .gte('created_at', fiveMinutesAgo);
 
-    const stuckParticipantIds = new Set(stuckData?.map(s => s.participant_id) || []);
+    const stuckParticipantIds = new Set(stuckData?.map((signal) => signal.participant_id) || []);
 
     // Exclude dismissed stuck signals
     for (const dismissedId of dismissedStuckRef.current) {
       stuckParticipantIds.delete(dismissedId);
     }
 
-    // Build participant info
-    const enriched: ParticipantInfo[] = participantsData.map(p => {
-      const completedSteps = (submissionsData || [])
-        .filter(s => s.participant_id === p.id)
-        .map(s => s.step_id);
+    const completedStepsByParticipant = new Map<string, string[]>();
+    for (const submission of submissionsData || []) {
+      const participantSteps = completedStepsByParticipant.get(submission.participant_id);
+      if (participantSteps) {
+        participantSteps.push(submission.step_id);
+      } else {
+        completedStepsByParticipant.set(submission.participant_id, [submission.step_id]);
+      }
+    }
 
+    // Build participant info
+    const enriched: ParticipantInfo[] = participantsData.map((participant) => {
       return {
-        ...p,
-        is_stuck: stuckParticipantIds.has(p.id),
-        completed_steps: completedSteps,
-        facilitator_notes: p.facilitator_notes || null,
+        ...participant,
+        is_stuck: stuckParticipantIds.has(participant.id),
+        completed_steps: completedStepsByParticipant.get(participant.id) || [],
+        facilitator_notes: participant.facilitator_notes || null,
       };
     });
 
@@ -156,36 +157,52 @@ export function ParticipantList({
   }, [sessionId, fetchParticipants]);
 
   // Filter & Sort
-  const filteredParticipants = participants
-    .filter(p => {
-      // Search filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        if (!p.display_name.toLowerCase().includes(q) &&
-            !(p.email?.toLowerCase().includes(q))) {
-          return false;
+  const filteredParticipants = useMemo(() => {
+    const now = Date.now();
+    const search = searchQuery.trim().toLowerCase();
+
+    return participants
+      .filter((participant) => {
+        // Search filter
+        if (search) {
+          if (!participant.display_name.toLowerCase().includes(search) &&
+              !(participant.email?.toLowerCase().includes(search))) {
+            return false;
+          }
         }
-      }
 
-      // Status filter
-      if (filterBy === 'stuck') return p.is_stuck;
-      if (filterBy === 'completed') return p.completed_steps.length === totalSteps;
-      if (filterBy === 'active') {
-        const lastSeen = new Date(p.last_seen_at).getTime();
-        return Date.now() - lastSeen < 2 * 60 * 1000; // Active in last 2 min
-      }
+        // Status filter
+        if (filterBy === 'stuck') return participant.is_stuck;
+        if (filterBy === 'completed') return participant.completed_steps.length === totalSteps;
+        if (filterBy === 'active') {
+          const lastSeen = new Date(participant.last_seen_at).getTime();
+          return now - lastSeen < 2 * 60 * 1000; // Active in last 2 min
+        }
 
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'name') return a.display_name.localeCompare(b.display_name);
-      if (sortBy === 'progress') return b.completed_steps.length - a.completed_steps.length;
-      if (sortBy === 'recent') return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
-      return 0;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'name') return a.display_name.localeCompare(b.display_name);
+        if (sortBy === 'progress') return b.completed_steps.length - a.completed_steps.length;
+        if (sortBy === 'recent') return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
+        return 0;
+      });
+  }, [filterBy, participants, searchQuery, sortBy, totalSteps]);
 
-  const stuckCount = participants.filter(p => p.is_stuck).length;
-  const completedAllCount = participants.filter(p => p.completed_steps.length === totalSteps).length;
+  const { stuckCount, completedAllCount } = useMemo(() => (
+    participants.reduce(
+      (summary, participant) => {
+        if (participant.is_stuck) {
+          summary.stuckCount += 1;
+        }
+        if (participant.completed_steps.length === totalSteps) {
+          summary.completedAllCount += 1;
+        }
+        return summary;
+      },
+      { stuckCount: 0, completedAllCount: 0 }
+    )
+  ), [participants, totalSteps]);
 
   // Get initials for avatar
   const getInitials = (name: string) => {
@@ -472,4 +489,4 @@ export function ParticipantList({
       )}
     </div>
   );
-}
+});

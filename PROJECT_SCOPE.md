@@ -253,7 +253,8 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - **Approved Clients:** Pre-configured client list per organization
 - **QR Code:** Modal with scannable join link
 - **Real-time Sync:** All state changes broadcast via Supabase Realtime
-- **Facilitator Preview:** Generate preview JWT so facilitators can test the participant view
+- **Reopen Session:** Ended sessions can be reopened (set back to `published`, clears `ended_at`) from the sessions table dropdown
+- **Facilitator Preview:** Full-screen modal preview of session content (reuses `TemplatePreview` component) — no participant record created. A legacy `preview-token` API route is retained for potential future test-as-participant functionality.
 
 ### 5. Presenter Mode (Facilitator View)
 - **Step Navigation:** Previous/Next controls with module awareness
@@ -265,7 +266,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
   - Q&A queue with answer functionality
   - Facilitator notes per participant
 - **Submission Gallery:** View all participant submissions for current step
-- **Preview as Attendee:** Opens participant view with auto-generated JWT (works on production/Vercel)
+- **Preview as Attendee:** Full-screen modal preview fetching session snapshot data (modules, steps, prompt blocks) client-side and rendering via `TemplatePreview` overlay — no participant record is created, no JWT needed
 - **Session Control:** End session with participant notification
 - **Connection Status:** Visual Wifi/WifiOff indicator for Realtime connection
 
@@ -388,7 +389,7 @@ Facilitator (Supabase Auth Protected):
 | POST | `/api/admin/sessions` | Create session from template |
 | PATCH/DELETE | `/api/admin/sessions/[sessionId]` | Update or end session |
 | POST | `/api/admin/sessions/[sessionId]/resync` | Re-sync session snapshots to current template |
-| POST | `/api/admin/sessions/[sessionId]/preview-token` | Generate facilitator preview JWT |
+| POST | `/api/admin/sessions/[sessionId]/preview-token` | Generate facilitator preview JWT (retained for future test-as-participant use) |
 | GET/PATCH | `/api/admin/participants/[id]/notes` | Facilitator notes per participant |
 | GET | `/api/admin/participants` | List participants for a session |
 | GET/POST | `/api/admin/library` | List or create library activities |
@@ -396,12 +397,6 @@ Facilitator (Supabase Auth Protected):
 | POST | `/api/admin/library/save-from-template` | Save template module to library |
 | GET/POST | `/api/admin/clients` | List or add approved clients |
 | PATCH/DELETE | `/api/admin/clients/[clientId]` | Update or delete approved client |
-
-**Webhook Routes** (Service-to-service):
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| POST | `/api/webhooks/prompt-pack-sent` | n8n callback after email delivery |
-| GET | `/api/webhooks/prompt-pack-due` | Polling endpoint for pending prompt pack deliveries |
 
 All API routes return `{ success: boolean, error?: string, data?: T }` and use Zod for request body validation.
 
@@ -578,8 +573,7 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 - `cleanup-old-sessions` — Periodic cleanup of sessions ended > 72 hours ago (cascade deletes analytics → feedback → submissions → participants → snapshots). Triggered via `pg_cron` with `CRON_SECRET` verification.
 
 ### Webhook Integration (n8n)
-- `/api/webhooks/prompt-pack-due` — GET endpoint polled by n8n to find participants eligible for prompt pack delivery
-- `/api/webhooks/prompt-pack-sent` — POST callback from n8n to record successful email delivery timestamp
+- `/api/email/prompt-pack` — On-demand endpoint: participant requests prompt pack email after giving feedback
 
 ---
 
@@ -628,12 +622,11 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 4. System remaps `current_step_id` using `original_step_id` references
 5. **Constraint:** Only available for `draft` or `published` sessions (live/ended sessions have submissions with FK constraints)
 
-### 7. Prompt Pack Email Queue Workflow
+### 7. Prompt Pack Email Delivery
 1. Participant submits feedback at session end
-2. System marks participant as eligible for prompt pack delivery (`email_consent` + feedback submitted)
-3. Webhook endpoint `/api/webhooks/prompt-pack-due` returns eligible participants (polled by n8n)
-4. External service (n8n) sends personalized prompt pack emails
-5. n8n calls `/api/webhooks/prompt-pack-sent` to record `prompt_pack_emailed_at` timestamp
+2. Participant requests prompt pack via email (on-demand)
+3. System generates personalized PDF and sends via n8n webhook
+4. `prompt_pack_emailed_at` timestamp is recorded
 
 ---
 

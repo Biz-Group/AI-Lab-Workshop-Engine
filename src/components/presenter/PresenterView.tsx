@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -13,23 +14,20 @@ import {
   AlertTriangle,
   Clock,
   RefreshCw,
-  ExternalLink,
+  Eye,
   CheckCircle,
   Copy,
   Download,
   QrCode,
-  MessageCircle,
-  Send,
-  Trash2,
-  ChevronDown as ChevDown,
   Minus,
   Plus,
   ImageIcon,
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { Button, Timer, Card, CardContent, ProgressBar, QrCodeModal } from '@/components/ui';
+import { Button, Timer, Card, CardContent, ProgressBar } from '@/components/ui';
 import { ParticipantList } from './ParticipantList';
+import { PresenterQAPanel, type PresenterQuestion } from './PresenterQAPanel';
 import { createClient } from '@/lib/supabase';
 import { formatJoinCodeForDisplay, cn } from '@/lib/utils';
 import {
@@ -69,6 +67,34 @@ interface PresenterViewProps {
 
 type ChannelConnectionStatus = 'connecting' | 'connected' | 'error';
 
+interface PreviewPromptBlock {
+  id: string;
+  title: string;
+  content_markdown: string;
+  is_copyable: boolean;
+  order_index: number;
+}
+
+interface PreviewStep {
+  id: string;
+  title: string;
+  instruction_markdown: string;
+  order_index: number;
+  estimated_minutes: number | null;
+  is_required: boolean;
+  ai_tool_name?: string | null;
+  ai_tool_url?: string | null;
+  prompt_blocks: PreviewPromptBlock[];
+}
+
+interface PreviewModule {
+  id: string;
+  title: string;
+  objective: string | null;
+  order_index: number;
+  steps: PreviewStep[];
+}
+
 function mapRealtimeChannelStatus(status: string): ChannelConnectionStatus {
   if (status === 'SUBSCRIBED') return 'connected';
   if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -86,6 +112,30 @@ function deriveBroadcastStatus(
   return 'connecting';
 }
 
+const LazyQrCodeModal = dynamic(
+  () => import('@/components/ui/QrCodeModal').then((mod) => mod.QrCodeModal),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+        <div className="bg-white text-gray-800 text-sm px-4 py-2 rounded-lg shadow-lg">Loading QR code...</div>
+      </div>
+    ),
+  }
+);
+
+const LazyTemplatePreview = dynamic(
+  () => import('@/app/admin/templates/[templateId]/TemplatePreview').then((mod) => mod.TemplatePreview),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center">
+        <div className="bg-white text-gray-800 text-sm px-4 py-2 rounded-lg shadow-lg">Loading preview...</div>
+      </div>
+    ),
+  }
+);
+
 export function PresenterView({ 
   session: initialSession, 
   modules,
@@ -98,20 +148,9 @@ export function PresenterView({
   const [completedCount, setCompletedCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [previewModules, setPreviewModules] = useState<PreviewModule[] | null>(null);
   const broadcastChannelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
-
-  // Q&A state
-  interface Question {
-    id: string;
-    participant_name: string;
-    question_text: string;
-    answer_text: string | null;
-    is_answered: boolean;
-    created_at: string;
-  }
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
-  const [showAnswered, setShowAnswered] = useState(false);
+  const [questions, setQuestions] = useState<PresenterQuestion[]>([]);
   const [channelStatuses, setChannelStatuses] = useState<{
     presenter: ChannelConnectionStatus;
     broadcast: ChannelConnectionStatus;
@@ -144,6 +183,7 @@ export function PresenterView({
       globalIndex: modules.slice(0, moduleIndex).reduce((acc, m) => acc + m.steps.length, 0) + stepIndex,
     }))
   ), [modules]);
+  const allStepIds = useMemo(() => allSteps.map((step) => step.id), [allSteps]);
 
   const currentStepIndex = allSteps.findIndex(s => s.id === session.currentStepId);
   const currentStep = allSteps[currentStepIndex] || allSteps[0];
@@ -220,6 +260,81 @@ export function PresenterView({
     setCompletedCount(count || 0);
   }, [initialSession.id]);
 
+  const refreshDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshPendingRef = useRef({ analytics: false, completions: false });
+  const refreshInFlightRef = useRef({ analytics: false, completions: false });
+  const refreshQueuedRef = useRef({ analytics: false, completions: false });
+
+  const runParticipationRefresh = useCallback(async () => {
+    if (refreshInFlightRef.current.analytics) {
+      refreshQueuedRef.current.analytics = true;
+      return;
+    }
+
+    refreshInFlightRef.current.analytics = true;
+    try {
+      await fetchParticipationAnalytics();
+    } finally {
+      refreshInFlightRef.current.analytics = false;
+      if (refreshQueuedRef.current.analytics) {
+        refreshQueuedRef.current.analytics = false;
+        void runParticipationRefresh();
+      }
+    }
+  }, [fetchParticipationAnalytics]);
+
+  const runCompletionsRefresh = useCallback(async () => {
+    if (refreshInFlightRef.current.completions) {
+      refreshQueuedRef.current.completions = true;
+      return;
+    }
+
+    refreshInFlightRef.current.completions = true;
+    try {
+      await fetchCompletions();
+    } finally {
+      refreshInFlightRef.current.completions = false;
+      if (refreshQueuedRef.current.completions) {
+        refreshQueuedRef.current.completions = false;
+        void runCompletionsRefresh();
+      }
+    }
+  }, [fetchCompletions]);
+
+  const flushScheduledRefreshes = useCallback(() => {
+    const runAnalytics = refreshPendingRef.current.analytics;
+    const runCompletions = refreshPendingRef.current.completions;
+
+    refreshPendingRef.current.analytics = false;
+    refreshPendingRef.current.completions = false;
+
+    if (runCompletions) {
+      void runCompletionsRefresh();
+    }
+
+    if (runAnalytics) {
+      void runParticipationRefresh();
+    }
+  }, [runCompletionsRefresh, runParticipationRefresh]);
+
+  const scheduleRealtimeRefresh = useCallback(
+    (options: { analytics?: boolean; completions?: boolean }) => {
+      if (options.analytics) {
+        refreshPendingRef.current.analytics = true;
+      }
+      if (options.completions) {
+        refreshPendingRef.current.completions = true;
+      }
+
+      if (refreshDebounceTimerRef.current) return;
+      refreshDebounceTimerRef.current = setTimeout(() => {
+        refreshDebounceTimerRef.current = null;
+        flushScheduledRefreshes();
+      }, 300);
+    },
+    [flushScheduledRefreshes]
+  );
+
   // Fetch completion count once when current step changes (Realtime handles incremental updates)
   useEffect(() => {
     currentStepIdRef.current = session.currentStepId;
@@ -229,6 +344,13 @@ export function PresenterView({
   useEffect(() => {
     void fetchParticipationAnalytics();
   }, [fetchParticipationAnalytics]);
+
+  useEffect(() => () => {
+    if (refreshDebounceTimerRef.current) {
+      clearTimeout(refreshDebounceTimerRef.current);
+      refreshDebounceTimerRef.current = null;
+    }
+  }, []);
 
   // Map snake_case API keys to camelCase state keys
   const mapApiToState = (updates: Record<string, unknown>): Record<string, unknown> => {
@@ -366,7 +488,7 @@ export function PresenterView({
           filter: `session_id=eq.${initialSession.id}`,
         },
         () => {
-          void fetchParticipationAnalytics();
+          scheduleRealtimeRefresh({ analytics: true });
         }
       )
       .on(
@@ -379,7 +501,7 @@ export function PresenterView({
         },
         (payload) => {
           if (payload.new.event_type === 'stuck_signal') {
-            void fetchParticipationAnalytics();
+            scheduleRealtimeRefresh({ analytics: true });
           }
         }
       )
@@ -392,8 +514,7 @@ export function PresenterView({
           filter: `session_id=eq.${initialSession.id}`,
         },
         () => {
-          void fetchCompletions();
-          void fetchParticipationAnalytics();
+          scheduleRealtimeRefresh({ analytics: true, completions: true });
         }
       )
       .on(
@@ -406,7 +527,7 @@ export function PresenterView({
         },
         () => {
           void fetchQuestions();
-          void fetchParticipationAnalytics();
+          scheduleRealtimeRefresh({ analytics: true });
         }
       )
       .subscribe((status) => {
@@ -447,12 +568,13 @@ export function PresenterView({
       supabase.removeChannel(bcastChannel);
       broadcastChannelRef.current = null;
     };
-  }, [fetchCompletions, fetchParticipationAnalytics, fetchQuestions, initialSession.id]);
+  }, [fetchQuestions, initialSession.id, scheduleRealtimeRefresh]);
 
   // Answer a question
-  const answerQuestion = async (questionId: string) => {
-    const text = answerDrafts[questionId]?.trim();
-    if (!text) return;
+  const answerQuestion = useCallback(async (questionId: string, answerText: string): Promise<boolean> => {
+    const text = answerText.trim();
+    if (!text) return false;
+
     try {
       const res = await fetch(`/api/questions/${questionId}`, {
         method: 'PATCH',
@@ -461,15 +583,16 @@ export function PresenterView({
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      setAnswerDrafts(prev => { const n = { ...prev }; delete n[questionId]; return n; });
       toast.success('Answer sent');
+      return true;
     } catch {
       toast.error('Failed to answer');
+      return false;
     }
-  };
+  }, []);
 
   // Delete a question
-  const deleteQuestion = async (questionId: string) => {
+  const deleteQuestion = useCallback(async (questionId: string): Promise<void> => {
     try {
       const res = await fetch(`/api/questions/${questionId}`, { method: 'DELETE' });
       const data = await res.json();
@@ -477,10 +600,7 @@ export function PresenterView({
     } catch {
       toast.error('Failed to delete');
     }
-  };
-
-  const unansweredQuestions = questions.filter(q => !q.is_answered);
-  const answeredQuestions = questions.filter(q => q.is_answered);
+  }, []);
 
   const completionPercentage = participantCount > 0 
     ? Math.round((completedCount / participantCount) * 100) 
@@ -579,7 +699,7 @@ export function PresenterView({
         <div className="w-72 flex-shrink-0 flex flex-col border-r border-gray-700 overflow-hidden">
           <ParticipantList
             sessionId={session.id}
-            allStepIds={allSteps.map(s => s.id)}
+            allStepIds={allStepIds}
             totalSteps={allSteps.length}
             className="flex-1 overflow-hidden"
           />
@@ -838,16 +958,44 @@ export function PresenterView({
               className="w-full justify-start"
               onClick={async () => {
                 try {
-                  const res = await fetch(`/api/admin/sessions/${session.id}/preview-token`, { method: 'POST' });
-                  const data = await res.json();
-                  if (!data.success) throw new Error(data.error);
-                  window.open(`/s/${session.id}`, '_blank');
+                  const supabase = createClient();
+                  const { data: snapshotModules, error } = await supabase
+                    .from('session_snapshot_modules')
+                    .select(`
+                      id, title, objective, order_index,
+                      steps:session_snapshot_steps(
+                        id, title, instruction_markdown, order_index,
+                        estimated_minutes, is_required, ai_tool_name, ai_tool_url,
+                        prompt_blocks:session_snapshot_prompt_blocks(
+                          id, title, content_markdown, is_copyable, order_index
+                        )
+                      )
+                    `)
+                    .eq('session_id', session.id)
+                    .order('order_index');
+                  if (error || !snapshotModules?.length) {
+                    toast.error('No session content to preview');
+                    return;
+                  }
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const sorted = (snapshotModules as any[])
+                    .sort((a, b) => a.order_index - b.order_index)
+                    .map(m => ({
+                      ...m,
+                      steps: (m.steps || [])
+                        .sort((a: { order_index: number }, b: { order_index: number }) => a.order_index - b.order_index)
+                        .map((s: { prompt_blocks?: Array<{ order_index: number }> }) => ({
+                          ...s,
+                          prompt_blocks: (s.prompt_blocks || []).sort((a: { order_index: number }, b: { order_index: number }) => a.order_index - b.order_index),
+                        })),
+                    }));
+                  setPreviewModules(sorted);
                 } catch {
-                  window.open(`/s/${session.id}`, '_blank');
+                  toast.error('Failed to load preview');
                 }
               }}
             >
-              <ExternalLink className="w-4 h-4 mr-2" />
+              <Eye className="w-4 h-4 mr-2" />
               Preview as Attendee
             </Button>
             <Button
@@ -868,7 +1016,7 @@ export function PresenterView({
               }}
             >
               <ImageIcon className="w-4 h-4 mr-2" />
-              Image Gallery
+              Submission Gallery
             </Button>
           </div>
 
@@ -897,108 +1045,32 @@ export function PresenterView({
           )}
 
           {/* Q&A Panel */}
-          <div className="mt-5 border-t border-gray-700 pt-4 flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
-                <MessageCircle className="w-4 h-4" />
-                Q&A
-                {unansweredQuestions.length > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {unansweredQuestions.length}
-                  </span>
-                )}
-              </h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-              {unansweredQuestions.length === 0 && answeredQuestions.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">No questions yet</p>
-              ) : (
-                <>
-                  {/* Unanswered Questions */}
-                  {unansweredQuestions.map(q => (
-                    <div key={q.id} className="bg-gray-700 rounded-lg p-3 border border-amber-500/30">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <span className="text-xs font-medium text-brand-400">{q.participant_name}</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-gray-500">
-                            {new Date(q.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <button
-                            onClick={() => deleteQuestion(q.id)}
-                            className="p-0.5 text-gray-500 hover:text-red-400 transition-colors"
-                            title="Remove question"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-200 mb-2">{q.question_text}</p>
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={answerDrafts[q.id] || ''}
-                          onChange={(e) => setAnswerDrafts(prev => ({ ...prev, [q.id]: e.target.value }))}
-                          onKeyDown={(e) => e.key === 'Enter' && answerQuestion(q.id)}
-                          placeholder="Type answer..."
-                          className="flex-1 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-xs text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        />
-                        <button
-                          onClick={() => answerQuestion(q.id)}
-                          disabled={!answerDrafts[q.id]?.trim()}
-                          className="p-1 bg-brand-600 text-white rounded hover:bg-brand-700 disabled:opacity-40 transition-colors"
-                        >
-                          <Send className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Answered Questions (collapsible) */}
-                  {answeredQuestions.length > 0 && (
-                    <div>
-                      <button
-                        onClick={() => setShowAnswered(!showAnswered)}
-                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-400 transition-colors py-1"
-                      >
-                        <ChevDown className={cn('w-3 h-3 transition-transform', showAnswered && 'rotate-180')} />
-                        Answered ({answeredQuestions.length})
-                      </button>
-                      {showAnswered && (
-                        <div className="space-y-2 mt-1">
-                          {answeredQuestions.map(q => (
-                            <div key={q.id} className="bg-gray-700/50 rounded-lg p-2.5 border border-green-500/20">
-                              <div className="flex items-start justify-between gap-2 mb-0.5">
-                                <span className="text-xs text-gray-400">{q.participant_name}</span>
-                                <button
-                                  onClick={() => deleteQuestion(q.id)}
-                                  className="p-0.5 text-gray-500 hover:text-red-400 transition-colors"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <p className="text-xs text-gray-300 mb-1">{q.question_text}</p>
-                              <p className="text-xs text-green-400">↳ {q.answer_text}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          <PresenterQAPanel
+            questions={questions}
+            onAnswerQuestion={answerQuestion}
+            onDeleteQuestion={deleteQuestion}
+          />
         </div>
       </main>
 
       {/* QR Code Modal */}
-      <QrCodeModal
-        isOpen={showQrModal}
-        onClose={() => setShowQrModal(false)}
-        joinCode={formatJoinCodeForDisplay(session.joinCode)}
-        joinUrl={typeof window !== 'undefined' ? `${window.location.origin}/join/${session.joinCode}` : ''}
-      />
+      {showQrModal && (
+        <LazyQrCodeModal
+          isOpen={showQrModal}
+          onClose={() => setShowQrModal(false)}
+          joinCode={formatJoinCodeForDisplay(session.joinCode)}
+          joinUrl={typeof window !== 'undefined' ? `${window.location.origin}/join/${session.joinCode}` : ''}
+        />
+      )}
+
+      {/* Session Preview Modal */}
+      {previewModules && (
+        <LazyTemplatePreview
+          templateName={session.templateName}
+          modules={previewModules}
+          onClose={() => setPreviewModules(null)}
+        />
+      )}
     </div>
   );
 }

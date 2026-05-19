@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         }
       | null = null;
 
+    // 1. Try resume via existing JWT cookie
     const existingParticipantSession = await readParticipantSession(request);
     if (existingParticipantSession?.session_id === validatedData.sessionId) {
       const { data: resumedParticipant, error: participantUpdateError } = await supabase
@@ -81,6 +82,38 @@ export async function POST(request: NextRequest) {
       participant = resumedParticipant;
     }
 
+    // 2. Fallback: resume via email match (handles expired cookie / different browser)
+    if (!participant && normalizedEmail) {
+      const { data: existingByEmail } = await supabase
+        .from('participants')
+        .select('id, display_name')
+        .eq('session_id', validatedData.sessionId)
+        .eq('email', normalizedEmail)
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingByEmail) {
+        const { data: resumedParticipant, error: updateError } = await supabase
+          .from('participants')
+          .update({
+            display_name: normalizedDisplayName,
+            email_consent: validatedData.emailConsent,
+            marketing_consent: validatedData.marketingConsent,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('id', existingByEmail.id)
+          .eq('session_id', validatedData.sessionId)
+          .select('id, display_name')
+          .single();
+
+        if (!updateError && resumedParticipant) {
+          participant = resumedParticipant;
+        }
+      }
+    }
+
+    // 3. Create new participant if no match found
     if (!participant) {
       const { data: createdParticipant, error: participantError } = await supabase
         .from('participants')
