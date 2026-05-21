@@ -1,6 +1,6 @@
 # AI Workshop Runner - Task List
 
-**Last Updated:** May 20, 2026  
+**Last Updated:** May 21, 2026  
 **Project Status:** Production-Ready (Active Development)
 
 ---
@@ -14,7 +14,7 @@
 - [x] ESLint + Vitest setup
 - [x] Environment variables + deployment config
 
-### #2 — Database Schema (22 migrations)
+### #2 — Database Schema (23 migrations)
 - [x] Core tables: organizations, facilitator_users, templates, modules, steps, prompt_blocks
 - [x] Session snapshot tables (frozen copies at session creation)
 - [x] Participant data: participants, submissions, votes, analytics_events
@@ -154,25 +154,38 @@
 - [x] View toggle (All / Images / Responses)
 - [x] Search and expand/collapse functionality
 
+### #20 — Team Management & Access Approval
+- [x] access_requests table with RLS policies (migration 023)
+- [x] is_owner_of_org() helper function
+- [x] /api/admin/team route (GET, POST approve, PATCH role, DELETE remove)
+- [x] /api/admin/team/deny route (POST deny request)
+- [x] /api/auth/request-access route (GET orgs, POST submit request)
+- [x] /admin/team page (server component, owner-only guard)
+- [x] TeamManager client component (approve/deny requests, role management, remove members)
+- [x] AccessRequestForm client component (replaces dead-end Access Denied block)
+- [x] AdminNav dropdown "Team Management" link (owner-only)
+- [x] Self-registration approval flow (no email invitations)
+- [x] Full role management (owner/admin/facilitator) with safeguards (can't demote/remove self)
+
 ---
 
 ## 📋 Open Tasks
 
-### #20 — Error Handling & Edge Cases
+### #21 — Error Handling & Edge Cases
 **Priority:** MEDIUM
 - [ ] Graceful handling of expired/invalid join codes
 - [ ] Session token expiration UX
 - [ ] Real-time reconnection improvements
 - [ ] Network error user feedback
 
-### #21 — Mobile Optimization
+### #22 — Mobile Optimization
 **Priority:** MEDIUM
 - [ ] Workshop runner mobile layout polish
 - [ ] Presenter mode tablet view
 - [ ] Touch interaction improvements
 - [ ] Mobile keyboard overlap fix
 
-### #22 — Accessibility
+### #23 — Accessibility
 **Priority:** MEDIUM
 - [ ] Keyboard navigation testing
 - [ ] Screen reader compatibility
@@ -180,14 +193,14 @@
 - [ ] Focus management in modals
 - [ ] Color contrast validation
 
-### #23 — Performance Optimization
+### #24 — Performance Optimization
 **Priority:** LOW
 - [ ] React.memo for heavy components
 - [ ] Lazy load non-critical components
 - [ ] Bundle size analysis
 - [ ] Image optimization
 
-### #24 — Documentation
+### #25 — Documentation
 **Priority:** LOW
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Facilitator user guide

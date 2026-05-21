@@ -1,8 +1,8 @@
 # AI Workshop Runner — Project Scope Document
 
 **Project Name:** AI Workshop Runner  
-**Version:** 2.2.0  
-**Last Updated:** May 20, 2026  
+**Version:** 2.3.0  
+**Last Updated:** May 21, 2026  
 **Status:** Production-Ready (Active Development)
 
 ---
@@ -78,10 +78,13 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 5. Complete workshop and submit feedback
 6. Receive personalized prompt pack
 
-### 3. Organization Admin
-**Role:** Platform administrator
+### 3. Organization Owner
+**Role:** Platform administrator (highest privilege)
 
 **Capabilities:**
+- Approve/deny team access requests from registered users
+- Manage team member roles (owner/admin/facilitator)
+- Remove team members
 - Manage facilitator access and organization settings
 - Curate activity library (reusable modules)
 - Manage approved client lists
@@ -351,6 +354,7 @@ Facilitator (Supabase Auth Protected):
   /admin/organizations           → Organization management
   /admin/sessions                → Session list with filtering
   /admin/sessions/new            → Create new session
+  /admin/team                    → Team management (owner-only: approve requests, roles)
   /session/[sessionId]/presenter → Facilitator presenter mode
   /session/[sessionId]/gallery   → Submission gallery view
 ```
@@ -397,6 +401,9 @@ Facilitator (Supabase Auth Protected):
 | POST | `/api/admin/library/save-from-template` | Save template module to library |
 | GET/POST | `/api/admin/clients` | List or add approved clients |
 | PATCH/DELETE | `/api/admin/clients/[clientId]` | Update or delete approved client |
+| GET/POST/PATCH/DELETE | `/api/admin/team` | Team management (list, approve, role change, remove) |
+| POST | `/api/admin/team/deny` | Deny pending access request |
+| GET/POST | `/api/auth/request-access` | List orgs / submit access request (auth'd users without facilitator record) |
 
 All API routes return `{ success: boolean, error?: string, data?: T }` and use Zod for request body validation.
 

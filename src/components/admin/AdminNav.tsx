@@ -15,6 +15,7 @@ import {
   X,
   ChevronDown,
   Home,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase';
@@ -133,6 +134,15 @@ export function AdminNav({ user }: AdminNavProps) {
                 <div className="absolute bottom-full left-0 right-0 mb-2 glass-strong rounded-lg shadow-lg border border-white/30 py-2">
                   <p className="px-4 py-2 text-sm text-gray-500">{user.email}</p>
                   <hr className="my-2 border-white/20" />
+                  {user.role === 'owner' && (
+                    <Link
+                      href="/admin/team"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50/50"
+                    >
+                      <Users className="w-4 h-4" />
+                      Team Management
+                    </Link>
+                  )}
                   <Link
                     href="/"
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50/50"

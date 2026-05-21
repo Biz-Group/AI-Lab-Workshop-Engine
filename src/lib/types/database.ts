@@ -68,6 +68,37 @@ export interface FacilitatorUserInsert {
 }
 
 // ============================================================================
+// Access Request Types
+// ============================================================================
+
+export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
+
+export interface AccessRequest {
+  id: string;
+  user_id: string;
+  organization_id: string;
+  display_name: string;
+  status: AccessRequestStatus;
+  requested_role: UserRole;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface AccessRequestInsert {
+  user_id: string;
+  organization_id: string;
+  display_name: string;
+  requested_role?: UserRole;
+}
+
+export interface AccessRequestUpdate {
+  status?: AccessRequestStatus;
+  resolved_by?: string;
+  resolved_at?: string;
+}
+
+// ============================================================================
 // Workshop Template Types
 // ============================================================================
 
