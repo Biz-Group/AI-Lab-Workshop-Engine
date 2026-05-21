@@ -1,505 +1,218 @@
 # AI Workshop Runner - Task List
 
-**Last Updated:** February 10, 2026  
-**Project Status:** In Development - MVP Phase
+**Last Updated:** May 20, 2026  
+**Project Status:** Production-Ready (Active Development)
 
 ---
 
-## 📊 Progress Overview
+## ✅ Completed Tasks
 
-| Category | Completed | In Progress | To Do | Total |
-|----------|-----------|-------------|-------|-------|
-| Core Features | 20 | 0 | 5 | 25 |
-| UI Components | 15 | 0 | 0 | 15 |
-| API Endpoints | 10 | 0 | 2 | 12 |
-| Testing | 1 | 2 | 8 | 11 |
-| Documentation | 4 | 0 | 3 | 7 |
-| **TOTAL** | **50** | **2** | **18** | **70** |
+### #1 — Project Foundation
+- [x] Next.js 16 App Router + TypeScript strict mode
+- [x] Tailwind CSS + custom brand palette
+- [x] Supabase client config (browser, server, service role)
+- [x] ESLint + Vitest setup
+- [x] Environment variables + deployment config
 
-**Overall Completion:** 71.4%
+### #2 — Database Schema (22 migrations)
+- [x] Core tables: organizations, facilitator_users, templates, modules, steps, prompt_blocks
+- [x] Session snapshot tables (frozen copies at session creation)
+- [x] Participant data: participants, submissions, votes, analytics_events
+- [x] Feedback table (rating, text, most_valuable)
+- [x] Q&A system (session_questions)
+- [x] Activity library tables (activity_library, steps, prompt_blocks)
+- [x] Approved clients table
+- [x] Leads table with unique constraint (organization_id, email)
+- [x] RLS policies on all 22 tables + hardened attendee access (migration 021)
+- [x] Storage buckets: prompt-packs, submission-images, org-logos
+- [x] Performance indexes (migration 013)
+- [x] Prompt pack email tracking (prompt_pack_emailed_at on participants)
 
-⚠️ **MIGRATION REQUIRED:** Run migration 005_fix_session_access.sql to fix attendee join issues
+### #3 — Dual Auth System
+- [x] Supabase Auth for facilitators (email + password)
+- [x] Custom HS256 JWT for participants (jose library)
+- [x] Middleware guards on /admin/* and /session/*/presenter
+- [x] httpOnly session cookies (secure in production)
+- [x] Rate limiting (join: 10/min, submissions: 20/min, analytics: 60/min, feedback: 5/min)
 
----
+### #4 — Template Management (Full CRUD + Editor)
+- [x] Template CRUD with nested modules → steps → prompt blocks
+- [x] Drag-and-drop reordering via @dnd-kit
+- [x] Collapse/expand all, search/filter, duration calculator
+- [x] Duplicate templates, modules, steps, prompt blocks (deep copy)
+- [x] Move step between modules
+- [x] Per-template and per-step AI tool configuration
+- [x] Variable substitution ({ORG_NAME}, {INDUSTRY}, etc.)
+- [x] Admin template editor UI at /admin/templates/[templateId]
+- [x] Template preview mode
 
-## ✅ Completed Features
+### #5 — Activity Library
+- [x] Organization-wide reusable module collection
+- [x] Auto-sync from template modules
+- [x] Copy library activities into templates
+- [x] Save template modules back to library
+- [x] Admin UI at /admin/modules
 
-### 🏗️ Infrastructure & Setup
-- [x] Next.js 14 project setup with App Router
-- [x] TypeScript configuration (strict mode)
-- [x] Tailwind CSS integration
-- [x] Supabase client configuration (browser & server)
-- [x] Environment variable setup
-- [x] ESLint configuration
-- [x] Vitest setup for testing
+### #6 — Session Management
+- [x] Session creation from template with snapshot copy
+- [x] Session resync (re-sync draft/published to latest template)
+- [x] Join code system (4-char alphanumeric or two-word)
+- [x] Status flow: draft → published → live → ended
+- [x] Event metadata (client_name, department, location, poc, event_type, event_date)
+- [x] Approved client linking
+- [x] QR code modal
+- [x] Reopen ended sessions
+- [x] Facilitator preview (full-screen modal, no participant record)
 
-### 🗄️ Database
-- [x] Initial schema migration (001_initial_schema.sql)
-- [x] RLS policies migration (002_rls_policies.sql)
-- [x] Storage and realtime setup (003_storage_realtime.sql)
-- [x] Feedback table migration (004_feedback_table.sql)
-- [x] Session access fix migration (005_fix_session_access.sql)
-- [x] Database seed script
-- [x] Join code generation utility
-- [x] Session token JWT utilities
+### #7 — Presenter Mode
+- [x] Step navigation with module awareness
+- [x] Timer controls + countdown display
+- [x] Live monitoring: participant list, progress, stuck signals, Q&A queue
+- [x] Facilitator notes per participant
+- [x] Submission gallery (images + text responses, masonry layout, search, view toggle)
+- [x] Preview as attendee overlay
+- [x] Session end with participant notification
+- [x] Connection status indicator (Wifi/WifiOff)
 
-### 🔐 Authentication & Authorization
-- [x] Supabase Auth integration
-- [x] Password-based login for facilitators
-- [x] Auth callback handler
-- [x] Session token generation for participants
-- [x] Middleware for route protection (FIXED: cookie detection)
-- [x] RLS policies for data isolation
-- [x] Facilitator access control and verification
-- [x] Proper session cookie handling
+### #8 — Workshop Runner (Participant View)
+- [x] Self-paced navigation (no forced locking)
+- [x] Narrative step sections (objective, actions, deliverable, checklist, tips, etc.)
+- [x] Interactive collapsible prompt blocks with clipboard copy
+- [x] Text submissions + image uploads per step
+- [x] Stuck signal, Q&A, progress map
+- [x] Chapter celebrations on module completion
+- [x] Waiting room (published status)
 
-### 👥 User Management
-- [x] Facilitator user model
-- [x] Organization model
-- [x] Session participant tracking
-- [x] Email-based lead capture
+### #9 — Lead Capture & Deliverables
+- [x] Email collection at join with consent options
+- [x] Prompt pack PDF generation (@react-pdf/renderer, server-side)
+- [x] Prompt pack email via n8n webhook (on-demand, participant-initiated after feedback)
+- [x] PDF download on session end page
+- [x] Variable substitution from org data
+- [x] prompt_pack_emailed_at tracking on participants
 
-### 📝 Template Management
-- [x] Workshop template CRUD (backend)
-- [x] Module management (backend)
-- [x] Step creation and ordering (backend)
-- [x] Prompt block system
-- [x] Markdown content support
-- [x] Template seeding
-- [ ] Template management UI (admin portal)
+### #10 — Feedback System
+- [x] 5-star rating + text feedback + "most valuable"
+- [x] Unique per participant per session
+- [x] Integrated into session end flow
 
-### 🎮 Session Management
-- [x] Session creation from template
-- [x] 6-digit join code generation
-- [x] Join code verification API
-- [x] Session status workflow (draft → published → live → ended)
-- [x] Current step tracking
-- [x] Navigation lock control
-- [x] Timer functionality
+### #11 — Q&A System
+- [x] Participant question submission during live sessions
+- [x] Facilitator queue in presenter view
+- [x] Mark answered with response text
+- [x] Real-time updates
 
-### 🎤 Presenter Mode
-- [x] Presenter view UI
-- [x] Step navigation (previous/next)
-- [x] Navigation lock toggle
-- [x] Timer controls
-- [x] Participant count display
-- [x] Stuck signal monitoring
-- [x] Completion rate tracking
-- [x] Real-time synchronization
-- [x] Session end functionality
-- [x] Direct session links from admin dashboard
+### #12 — Analytics & Tracking
+- [x] 15 event types tracked
+- [x] CSV export via buildSessionParticipationRows()
+- [x] Performance indexes on events, submissions, participants
 
-### 👨‍🎓 Participant Experience
-- [x] Join page with code entry
-- [x] Direct join via URL (/join/[code])
-- [x] Workshop runner UI
-- [x] Step display with instructions
-- [x] Prompt block rendering
-- [x] Copy to clipboard functionality
-- [x] Step completion marking
-- [x] Stuck signal button
-- [x] Progress indicators
-- [x] Real-time session updates
-- [x] Session end page
-- [x] Prompt pack email form
-- [x] Unlocked navigation (participants control their own pace)
-- [x] Improved text readability (all text black, not gray)
-- [x] Markdown content properly styled with dark text
+### #13 — Client Management
+- [x] Approved clients per organization with POC details
+- [x] Session linking to approved clients
+- [x] Admin CRUD at /api/admin/clients
 
-### 🎨 UI Components
-- [x] Button component
-- [x] Card component
-- [x] Input component (with improved text contrast)
-- [x] Checkbox component
-- [x] Modal component
-- [x] Timer component
-- [x] Progress bar component
-- [x] Loading spinner
-- [x] Copy button with feedback
-- [x] Navigation components
-- [x] Admin navigation
-- [x] Improved text readability (gray-900 for all inputs and content)
+### #14 — Real-time Features
+- [x] Supabase Realtime channels (session state, participants, submissions, Q&A)
+- [x] Optimistic updates + auto-reconnection
+- [x] Proper cleanup (removeChannel in useEffect)
 
-### 📡 API Endpoints
-- [x] POST /api/sessions/join - Join with code
-- [x] POST /api/sessions/verify - Verify token
-- [x] GET /api/admin/sessions/[id] - Get session
-- [x] PATCH /api/admin/sessions/[id] - Update session
-- [x] POST /api/analytics/event - Track events
-- [x] POST /api/email/prompt-pack - Send prompt pack
-- [x] POST /api/submissions - Participant submissions
-- [x] POST /api/feedback - Submit feedback (NEW)
-- [ ] POST /api/pdf/generate - Generate PDF (stub exists)
+### #15 — UI Component Library
+- [x] Button, Card, Input, TextArea, Checkbox, Modal, ConfirmModal
+- [x] CopyButton, PromptBlock (collapsible + copy)
+- [x] LoadingSpinner, LoadingOverlay, LoadingCard, EmptyState
+- [x] ProgressIndicator, ProgressBar, Timer, Countdown
+- [x] QrCodeModal
+- [x] Barrel export via components/ui/index.ts
 
-### 📊 Analytics
-- [x] Event tracking model, feedback_submitted
-- [x] Analytics API endpoint
-- [x] Event types: viewed, completed, copied, stuck, chatgpt_opened
-- [x] Session-based event aggregation
+### #16 — Testing Suite (10 test files)
+- [x] utils.test.ts — common utilities
+- [x] join-route.test.ts — join/resume participant logic
+- [x] email-prompt-pack-route.test.ts — email rendering
+- [x] pdf-generate-route.test.ts — PDF generation
+- [x] PresenterConnectionStatus.test.tsx — presenter connection
+- [x] WorkshopRunner.test.tsx — main runner component
+- [x] NarrativeProgressMap.test.tsx — progress indicator
+- [x] prompt-pack-utils.test.ts — prompt pack utilities
+- [x] session-analytics.test.ts — analytics aggregation
+- [x] SessionEndClient.test.tsx — end screen
+- [x] step-instructions.test.ts — instruction parsing
 
-### 🎨 Pages
-- [x] Landing page (/)
-- [x] Join page (/join)
-- [x] Login page (/auth/login) - FIXED (no auto-login, proper session handling)
-- [x] Auth callback handler
-- [x] Admin dashboard (/admin)
-- [x] Admin layout with access control
-- [x] Templates page (/admin/templates) - placeholder
-- [x] Sessions list page (/admin/sessions) - fully functional
-- [x] Modules page (/admin/modules) - placeholder
-- [x] Organizations page (/admin/organizations) - shows org details
-- [x] Presenter mode (/session/[id]/presenter)
-- [x] Participant workshop view (/s/[sessionId])
-- [x] Session end page with feedback (/s/[sessionId]/end)
+### #17 — n8n Webhook Integration
+- [x] sendPromptPackViaWebhook() in src/lib/server/n8n.ts
+- [x] On-demand email delivery via /api/email/prompt-pack
+- [x] Removed 90-minute auto-polling system (prompt-pack-due + prompt-pack-sent webhooks deleted)
+- [x] Prompt pack only sent when participant explicitly requests after feedback
 
----
+### #18 — Participant Resume by Email
+- [x] Join route now has 3-step resume: cookie → email match → create new
+- [x] Prevents duplicate participant records when same email rejoins a session
 
-## 🔄 In Progress
-
-### 🧪 Testing
-- [ ] **Unit tests for utilities** (Priority: High)
-  - [x] join-code.ts tests (basic coverage)
-  - [ ] session-token.ts tests
-  - [ ] common.ts tests
-  - [ ] Status: 1/3 utility modules tested
-
-### 📧 Email Delivery
-- [x] **Prompt pack email template** (Priority: High)
-  - HTML template design
-  - Variable substitution in prompts
-  - Testing with Resend
-  - Status: Complete - mandatory email on join, sent after feedback
-
-### 🎨 UI Components
-- [x] **Feedback form component** (Priority: High)
-  - 5-star rating system
-  - Feedback textarea
-  - Most valuable section (optional)
-  - Status: Complete - integrated with session end flow
-
-### 📱 Responsive Design
-- [ ] **Mobile optimization** (Priority: Medium)
-  - Workshop runner mobile layout
-  - Presenter mode tablet view
-  - Touch interactions
-  - Status: Basic responsive, needs polish
-
-### 🧩 Component Library
-- [ ] **Component documentation** (Priority: Low)
-  - Storybook setup (optional)
-  - Usage examples
-  - Props documentation
-  - Status: Components working, docs needed
-
-### 🔍 Admin Features
-- [ ] **Template list page** (Priority: Medium)
-  - /admin/templates route
-  - CRUD operations UI
-  - Status: Planned, not started
-
-### 📈 Analytics Dashboard
-- [ ] **Session analytics page** (Priority: Low)
-  - View event data per session
-  - Completion funnel
-  - Feedback ratings display
-  - Status: Data collection working, UI needed
-
-### 🧩 Component Library
-- [ ] **Component documentation** (Priority: Low)
-  - Storybook setup (optional)
-  - Usage examples
-  - Props documentation
-  - Status: Components working, docs needed
+### #19 — Submission Gallery Enhancement
+- [x] Extended SubmissionGallery to show both images and text responses
+- [x] Masonry layout with CSS columns
+- [x] View toggle (All / Images / Responses)
+- [x] Search and expand/collapse functionality
 
 ---
 
-## 📋 To Do - High Priority
+## 📋 Open Tasks
 
-### 🚨 Critical for MVP
-
-#### 1. PDF Generation
-**Status:** Not started  
-**Priority:** HIGH  
-**Estimated Effort:** 8 hours
-- [ ] Install PDF library (@react-pdf/renderer configured)
-- [ ] Create PDF template for prompt pack
-- [x] Handle mandatory email requirement on join
-- [x] Feedback requirement before prompt pack
-- [ ] Implement /api/pdf/generate endpoint
-- [ ] Add download button on session end page
-- [ ] Test PDF rendering with various content sizes
-
-#### 2. Error Handling & Edge Cases
-**Status:** Partial  
-**Priority:** HIGH  
-**Estimated Effort:** 6 hours
-- [ ] Handle expired/invalid join codes gracefully
-- [ ] Session token expiration handling
-- [ ] Real-time reconnection logic
+### #20 — Error Handling & Edge Cases
+**Priority:** MEDIUM
+- [ ] Graceful handling of expired/invalid join codes
+- [ ] Session token expiration UX
+- [ ] Real-time reconnection improvements
 - [ ] Network error user feedback
-- [ ] Concurrent navigation update conflicts
 
-#### 3. Admin Template Management UI
-**Status:** Not started  
-**Priority:** HIGH  
-**Estimated Effort:** 12 hours
-- [ ] Template list page (/admin/templates)
-- [ ] Template create/edit form
-- [ ] Module builder interface
-- [ ] Step editor with prompt blocks
-- [ ] Template duplicate functionality
+### #21 — Mobile Optimization
+**Priority:** MEDIUM
+- [ ] Workshop runner mobile layout polish
+- [ ] Presenter mode tablet view
+- [ ] Touch interaction improvements
+- [ ] Mobile keyboard overlap fix
 
-#### 4. Session History & Archive
-**Status:** Complete  
-**Priority:** HIGH  
-**Estimated Effort:** 4 hours
-- [x] Email requirement on join
-- [x] Feedback submission requirement
-- [x] Prompt pack sent after feedback
-- [ ] Add retry logic for failed sends
-- [ ] Track email delivery status
-- [ ] Export participant list
-- [ ] Delete/archive old sessions
-
-#### 5. Email Deliverability
-**Status:** Basic implementation  
-**Priority:** HIGH  
-**Estimated Effort:** 4 hours
-- [ ] Add retry logic for failed sends
-- [ ] Track email delivery status
-- [ ] Create fallback download option
-- [ ] Handle bounce/spam reports
-- [ ] Test with various email providers
-
----
-
-## 📋 To Do - Medium Priority
-
-### 🎯 Important but not blocking
-
-#### 6. Accessibility Improvements
-**Status:** Basic  
-**Priority:** MEDIUM  
-**Estimated Effort:** 8 hours
+### #22 — Accessibility
+**Priority:** MEDIUM
 - [ ] Keyboard navigation testing
 - [ ] Screen reader compatibility
 - [ ] ARIA labels on interactive elements
 - [ ] Focus management in modals
 - [ ] Color contrast validation
-- [ ] Alt text for images/icons
 
-#### 7. Performance Optimization
-**Status:** Not started  
-**Priority:** MEDIUM  
-**Estimated Effort:** 6 hours
-- [ ] Implement React.memo for heavy components
+### #23 — Performance Optimization
+**Priority:** LOW
+- [ ] React.memo for heavy components
 - [ ] Lazy load non-critical components
-- [ ] Optimize real-time subscription patterns
-- [ ] Add loading skeletons
-- [ ] Image optimization
 - [ ] Bundle size analysis
+- [ ] Image optimization
 
-#### 8. Participant Dashboard Enhancements
-**Status:** Basic  
-**Priority:** MEDIUM  
-**Estimated Effort:** 5 hours
-- [ ] Better progress visualization
-- [ ] Saved prompts section
-- [ ] Notes feature for each step
-- [ ] Bookmark favorite prompts
-- [ ] Return to session if refreshed
-
-#### 9. Enhanced Timer Features
-**Status:** Basic timer working  
-**Priority:** MEDIUM  
-**Estimated Effort:** 4 hours
-- [ ] Timer presets (5, 10, 15 min buttons)
-- [ ] Sound notification at end
-- [ ] Pause/resume timer
-- [ ] Timer templates per step
-
-#### 10. Supabase Edge Functions
-**Status:** Stub created  
-**Priority:** MEDIUM  
-**Estimated Effort:** 6 hours
-- [ ] Implement cleanup-old-sessions function
-- [ ] Scheduled session cleanup job
-- [ ] Automated email sending via edge function
-- [ ] Background analytics aggregation
-
----
-
-## 📋 To Do - Low Priority
-
-### 💡 Nice to have features
-
-#### 11. Branding Customization
-**Status:** Not started  
-**Priority:** LOW  
-**Estimated Effort:** 8 hours
-- [ ] Upload organization logo
-- [ ] Custom color schemes
-- [ ] Branded email templates
-- [ ] Custom domain support
-- [ ] White-label options
-
-#### 12. Multi-Language Support
-**Status:** Not started  
-**Priority:** LOW  
-**Estimated Effort:** 16 hours
-- [ ] i18n setup (next-i18next)
-- [ ] Extract all strings
-- [ ] Language selector
-- [ ] RTL support
-- [ ] Translation files (en, es, fr)
-
-#### 13. Participant Chat/Q&A
-**Status:** Not started  
-**Priority:** LOW  
-**Estimated Effort:** 12 hours
-- [ ] Real-time chat UI
-- [ ] Q&A submission
-- [ ] Facilitator moderation
-- [ ] Upvoting questions
-- [ ] ExportComplete (Feedback form implemented)  
-**Priority:** COMPLETED  
-**Estimated Effort:** 8 hours (DONE)
-- [x] Feedback form with rating (1-5 stars)
-- [x] General feedback text area
-- [x] "Most valuable" optional field
-- [x] Feedback submission before prompt pack
-- [x] Database table and API endpoint
-- [x] Integration with session end flow session start
-- [ ] Download links for participants
-- [ ] Storage bucket management
-
-#### 15. Post-Session Survey
-**Status:** Not started  
-**Priority:** LOW  
-**Estimated Effort:** 8 hours
-- [ ] Survey builder
-- [ ] Satisfaction rating
-- [ ] Open-ended feedback
-- [ ] NPS score calculation
-- [ ] Survey results dashboard
-
----
-
-## 🧪 Testing Tasks
-
-### Unit Tests
-- [x] join-code utility tests (basic)
-- [ ] session-token utility tests
-- [ ] common utility tests
-- [ ] API route handlers tests
-- [ ] Component unit tests
-
-### Integration Tests
-- [ ] Session creation flow
-- [ ] Join code verification flow
-- [ ] Real-time synchronization
-- [ ] Email delivery flow
-- [ ] End-to-end presenter workflow
-- [ ] End-to-end participant workflow
-
-### Performance Tests
-- [ ] Load test with 100 concurrent participants
-- [ ] Real-time message throughput
-- [ ] Database query optimization
-- [ ] API response times
-
-### Security Tests
-- [ ] RLS policy validation
-- [ ] Authentication bypass attempts
-- [ ] XSS prevention
-- [ ] CSRF protection
-- [ ] SQL injection prevention
-
----
-
-## 📚 Documentation Tasks
-
-### Code Documentation
-- [x] README.md (basic)
-- [x] FACILITATOR_SETUP.md (comprehensive setup guide)
-- [ ] API documentation (Swagger/OpenAPI)
-- [ ] Component props documentation
-- [ ] Database schema diagram
-- [ ] Architecture decision records (ADRs)
-
-### User Documentation
-- [x] Facilitator setup guide (account creation)
-- [ ] Facilitator user guide (full guide)
-- [ ] Participant quick start guide
-- [ ] Template creation guide
-- [ ] Troubleshooting guide
-- [ ] Video tutorials
-
-### Deployment Documentation
+### #24 — Documentation
+**Priority:** LOW
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] Facilitator user guide
 - [ ] Deployment guide (Vercel)
-- [ ] Environment setup guide
-- [ ] Backup and restore procedures
-- [ ] Monitoring setup guide
-- [ ] Incident response playbook
 
 ---
 
 ## 🐛 Known Issues
 
-### High Priority Bugs
-1. ~~**Facilitator login not working**~~ ✅ FIXED
-   - Issue: Middleware cookie detection was incorrect
-   - Fix: Updated to detect Supabase SSR cookie names
-   - Fixed: Feb 10, 2026
-
-2. ~~**Attendee join broken after making session_progress private**~~ ✅ FIXED
-   - Issue: Making view private removed service role grants
-   - Fix: Migration 005 adds explicit service_role policies
-   - Fixed: Feb 10, 2026
-
-3. **Real-time disconnect handling**
-   - Issue: Participants don't always reconnect after network drop
-   - Workaround: Refresh page
-   - Priority: HIGH
-
-4. **Timer sync drift**
-   - Issue: Client-side timer can drift from server time
-   - Workaround: Periodic server sync
-   - Priority: MEDIUM
-
-5. **Join code collision (theoretical)**
-   - Issue: Extremely rare but possible duplicate codes
-   - Workaround: Add collision detection and regeneration
-   - Priority: LOW
-
-### Medium Priority Bugs
-6. **Mobile keyboard overlaps input**
-   - Issue: On some mobile browsers, keyboard covers input fields
-   - Workaround: Manual scroll
-   - Priority: MEDIUM
-
-7. **Long module titles wrap poorly**
-   - Issue: UI breaks with very long module names
-   - Workaround: Keep titles under 50 chars
-   - Priority: LOW
+1. ~~**Facilitator login not working**~~ ✅ FIXED — middleware cookie detection
+2. ~~**Attendee join broken after private session_progress**~~ ✅ FIXED — migration 005
+3. ~~**Duplicate participants on same-email rejoin**~~ ✅ FIXED — email-based resume (#18)
+4. **Real-time disconnect handling** — participants don't always reconnect after network drop (workaround: refresh)
+5. **Timer sync drift** — client-side timer can drift from server time
+6. **Mobile keyboard overlaps input** — on some mobile browsers
 
 ---
 
 ## 🔮 Future Feature Ideas
-
-### Ideas for Later Phases
-- [ ] AI-powered prompt suggestions
-- [ ] Breakout rooms for group work
-- [ ] Video integration (Zoom/Teams embed)
-- [ ] Template marketplace
-- [ ] Mobile native apps
-- [ ] Offline mode for participants
-- [ ] Voice commands for facilitators
-- [ ] Auto-transcription of sessions
-- [ ] Certificate generation
-- [ ] Gamification (points, badges)
-- [ ] Social sharing of prompts
-- [ ] API for third-party integrations
+- AI-powered prompt suggestions (provider infrastructure in src/lib/ai/ ready)
+- Multi-facilitator support per session
+- Template marketplace / sharing
+- Breakout session support
+- Certificate generation
+- Advanced analytics dashboard
 - [ ] Webhook notifications
 - [ ] Advanced analytics (ML insights)
 - [ ] A/B testing for templates
@@ -659,7 +372,3 @@
 - 💡 **Idea** - Future enhancement
 
 ---
-
-*This task list is updated weekly. For daily updates, see project management board (Jira/Linear/GitHub Projects).*
-
-*Last reviewed: February 10, 2026*

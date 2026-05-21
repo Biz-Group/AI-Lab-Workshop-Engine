@@ -1,8 +1,8 @@
 # AI Workshop Runner — Project Scope Document
 
 **Project Name:** AI Workshop Runner  
-**Version:** 2.1.0  
-**Last Updated:** May 14, 2026  
+**Version:** 2.2.0  
+**Last Updated:** May 20, 2026  
 **Status:** Production-Ready (Active Development)
 
 ---
@@ -590,8 +590,9 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 1. Participant enters join code on `/join` or visits `/join/[code]`
 2. System verifies code, checks session is `published` or `live`
 3. Participant provides name, email, consent preferences
-4. System creates participant record + lead, generates custom JWT
-5. Participant lands in waiting room (if published) or workshop (if live)
+4. System attempts resume: first via JWT cookie, then by email match in session (prevents duplicate records)
+5. If no match, creates new participant record + lead, generates custom JWT
+6. Participant lands in waiting room (if published) or workshop (if live)
 
 ### 3. Live Workshop Execution
 1. Facilitator navigates through steps in presenter view
@@ -803,4 +804,4 @@ For a feature to be considered complete:
 
 ---
 
-*This document is a living document and should be updated as the project evolves. Last reviewed: May 14, 2026*
+*This document is a living document and should be updated as the project evolves. Last reviewed: May 20, 2026*

@@ -104,3 +104,12 @@ Sequential SQL files in `supabase/migrations/` (001–009). Add new migrations w
 3. **API route**: Under `src/app/api/` — use admin auth pattern or participant JWT pattern as appropriate
 4. **Components**: Server component for data fetching → client component for interactivity
 5. **Supabase join helpers**: Use `getJoinField()` / `getJoinObject()` from `src/lib/utils/supabase-join.ts` when querying joined relations (Supabase returns joins as array or object inconsistently)
+
+## Post-Task Documentation Rule
+
+After completing any code change (feature, bugfix, refactor, deletion, migration, etc.), **always** update both:
+
+1. **`PROJECT_SCOPE.md`** — Reflect the current state of the system (add/remove/update routes, components, workflows, schema references, etc.)
+2. **`TASK_LIST.md`** — Mark tasks completed, add new tasks discovered during work, update progress counts and dates
+
+This applies to every instruction, even small ones. Do not skip this step.
