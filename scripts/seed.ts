@@ -33,7 +33,7 @@ async function seed() {
   const orgId = uuidv4();
   const { error: orgError } = await supabase.from('organizations').insert({
     id: orgId,
-    name: 'Demo Co',
+    name: 'Biz Group',
     industry: 'Professional Services',
     tone_notes: 'Warm, practical, and upbeat.',
     example_use_cases: [
@@ -47,7 +47,7 @@ async function seed() {
     console.error('Failed to create organization:', orgError);
     process.exit(1);
   }
-  console.log(`✅ Created organization: Demo Co (${orgId})\n`);
+  console.log(`✅ Created organization: Biz Group (${orgId})\n`);
 
   // 2. Create Workshop Template
   console.log('Creating workshop template...');

@@ -6,6 +6,8 @@ const requireParticipantSessionMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
 const renderPromptPackPdfMock = vi.fn();
 const sendPromptPackViaWebhookMock = vi.fn();
+const checkRateLimitMock = vi.fn();
+const rateLimitResponseMock = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: createServiceClientMock,
@@ -25,6 +27,11 @@ vi.mock('@/lib/server/render-pdf', () => ({
 
 vi.mock('@/lib/server/n8n', () => ({
   sendPromptPackViaWebhook: sendPromptPackViaWebhookMock,
+}));
+
+vi.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: checkRateLimitMock,
+  rateLimitResponse: rateLimitResponseMock,
 }));
 
 function createRequest() {
@@ -56,6 +63,8 @@ describe('POST /api/email/prompt-pack', () => {
       },
       response: null,
     });
+    checkRateLimitMock.mockResolvedValue({ allowed: true });
+    rateLimitResponseMock.mockReturnValue(new Response(null, { status: 429 }));
 
     const participantBuilder = {
       select: vi.fn(() => participantBuilder),
@@ -66,6 +75,7 @@ describe('POST /api/email/prompt-pack', () => {
           display_name: 'Alex',
           session_id: '11111111-1111-1111-1111-111111111111',
           feedback_submitted: true,
+          prompt_pack_emailed_at: null,
         },
         error: null,
       })),
@@ -169,6 +179,7 @@ describe('POST /api/email/prompt-pack', () => {
           display_name: 'Alex',
           session_id: '11111111-1111-1111-1111-111111111111',
           feedback_submitted: false,
+          prompt_pack_emailed_at: null,
         },
         error: null,
       })),
@@ -184,5 +195,34 @@ describe('POST /api/email/prompt-pack', () => {
 
     expect(response.status).toBe(403);
     expect(data.success).toBe(false);
+  });
+
+  it('returns success no-op when prompt pack was already emailed', async () => {
+    const participantBuilder = {
+      select: vi.fn(() => participantBuilder),
+      eq: vi.fn(() => participantBuilder),
+      single: vi.fn(async () => ({
+        data: {
+          id: '22222222-2222-2222-2222-222222222222',
+          display_name: 'Alex',
+          session_id: '11111111-1111-1111-1111-111111111111',
+          feedback_submitted: true,
+          prompt_pack_emailed_at: new Date().toISOString(),
+        },
+        error: null,
+      })),
+    };
+
+    createServiceClientMock.mockResolvedValue({
+      from: vi.fn().mockImplementationOnce(() => participantBuilder),
+    });
+
+    const { POST } = await import('@/app/api/email/prompt-pack/route');
+    const response = await POST(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(sendPromptPackViaWebhookMock).not.toHaveBeenCalled();
   });
 });

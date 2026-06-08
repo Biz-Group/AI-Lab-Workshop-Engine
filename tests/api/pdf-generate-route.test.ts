@@ -4,6 +4,8 @@ import { NextRequest } from 'next/server';
 const requireParticipantSessionMock = vi.fn();
 const buildPromptPackDataMock = vi.fn();
 const renderPromptPackPdfMock = vi.fn();
+const checkRateLimitMock = vi.fn();
+const rateLimitResponseMock = vi.fn();
 
 vi.mock('@/lib/server/participant-session', () => ({
   requireParticipantSession: requireParticipantSessionMock,
@@ -15,6 +17,11 @@ vi.mock('@/lib/server/prompt-pack', () => ({
 
 vi.mock('@/lib/server/render-pdf', () => ({
   renderPromptPackPdf: renderPromptPackPdfMock,
+}));
+
+vi.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: checkRateLimitMock,
+  rateLimitResponse: rateLimitResponseMock,
 }));
 
 function createRequest() {
@@ -53,6 +60,8 @@ describe('POST /api/pdf/generate', () => {
       takeaways: [],
     });
     renderPromptPackPdfMock.mockResolvedValue(Buffer.from('pdf-data'));
+    checkRateLimitMock.mockResolvedValue({ allowed: true });
+    rateLimitResponseMock.mockReturnValue(new Response(null, { status: 429 }));
   });
 
   it('returns a real pdf attachment', async () => {

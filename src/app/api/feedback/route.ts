@@ -8,8 +8,8 @@ const feedbackSchema = z.object({
   sessionId: z.string().uuid(),
   participantId: z.string().uuid(),
   rating: z.number().int().min(1).max(5),
-  feedback: z.string().min(10, 'Feedback must be at least 10 characters'),
-  mostValuable: z.string().optional().nullable(),
+  feedback: z.string().min(10, 'Feedback must be at least 10 characters').max(3000, 'Feedback is too long'),
+  mostValuable: z.string().max(2000, 'Most valuable response is too long').optional().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit: 5 feedback submissions per minute per participant
-    const rl = checkRateLimit(`fb:${participantId}`, 5, 60_000);
+    const rl = await checkRateLimit(`fb:${participantId}`, 5, 60_000);
     if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
     const supabase = await createServiceClient();

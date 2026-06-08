@@ -78,6 +78,7 @@ interface WorkshopRunnerProps {
     timerEndAt: string | null;
     organization: { id: string; name: string; logo_url: string | null };
     template: { name: string; description: string | null };
+    clientName?: string | null;
     aiToolName?: string;
     aiToolUrl?: string;
   };
@@ -515,7 +516,7 @@ export function WorkshopRunner({
             />
             <h2 className="font-semibold text-gray-900 text-sm">{session.template.name}</h2>
           </div>
-          <p className="text-xs text-gray-500 pl-11">{session.organization.name}</p>
+          <p className="text-xs text-gray-500 pl-11">{session.clientName || session.organization.name}</p>
         </div>
         
         <NarrativeProgressMap
@@ -537,7 +538,7 @@ export function WorkshopRunner({
             <div>
               {/* Mobile-only session context (sidebar hidden on mobile) */}
               <p className="text-xs text-gray-400 lg:hidden mb-1">
-                {session.organization.name} — {session.template.name}
+                {session.clientName || session.organization.name} — {session.template.name}
               </p>
               <h1 className="text-2xl font-semibold text-gray-900">{currentStep.title}</h1>
               <p className="text-xs text-gray-400 mt-0.5">

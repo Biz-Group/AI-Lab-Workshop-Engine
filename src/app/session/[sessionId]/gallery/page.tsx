@@ -36,6 +36,7 @@ export default async function GalleryPage({ params }: PageProps) {
         id,
         status,
         join_code,
+        client_name,
         organization:organizations(name),
         template:workshop_templates(name)
       `)
@@ -87,7 +88,7 @@ export default async function GalleryPage({ params }: PageProps) {
         status: session.status,
         joinCode: session.join_code,
         templateName: getJoinField(session.template, 'name') || '',
-        organizationName: getJoinField(session.organization, 'name') || '',
+        organizationName: session.client_name || getJoinField(session.organization, 'name') || '',
       }}
       steps={steps}
     />

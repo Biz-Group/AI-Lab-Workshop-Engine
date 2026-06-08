@@ -29,7 +29,7 @@ vi.mock('@/lib/utils/rate-limit', () => ({
 function createJoinRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/sessions/join', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '127.0.0.1' },
+    headers: { 'Content-Type': 'application/json', 'x-vercel-ip': '127.0.0.1' },
     body: JSON.stringify(body),
   });
 }
@@ -37,7 +37,7 @@ function createJoinRequest(body: Record<string, unknown>) {
 describe('POST /api/sessions/join', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    checkRateLimitMock.mockReturnValue({ allowed: true });
+    checkRateLimitMock.mockResolvedValue({ allowed: true });
     readParticipantSessionMock.mockResolvedValue(null);
     createSessionTokenMock.mockResolvedValue('signed-token');
     setSessionTokenCookieMock.mockResolvedValue(undefined);
@@ -64,6 +64,14 @@ describe('POST /api/sessions/join', () => {
       })),
     };
 
+    const participantEmailLookupBuilder = {
+      select: vi.fn(() => participantEmailLookupBuilder),
+      eq: vi.fn(() => participantEmailLookupBuilder),
+      order: vi.fn(() => participantEmailLookupBuilder),
+      limit: vi.fn(() => participantEmailLookupBuilder),
+      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+    };
+
     const analyticsBuilder = {
       insert: vi.fn(async () => ({ error: null })),
     };
@@ -72,6 +80,7 @@ describe('POST /api/sessions/join', () => {
       from: vi
         .fn()
         .mockImplementationOnce(() => sessionBuilder)
+        .mockImplementationOnce(() => participantEmailLookupBuilder)
         .mockImplementationOnce(() => participantInsertBuilder)
         .mockImplementationOnce(() => analyticsBuilder),
     });

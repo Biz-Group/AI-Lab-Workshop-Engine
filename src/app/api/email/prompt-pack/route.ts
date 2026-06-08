@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireParticipantSession } from '@/lib/server/participant-session';
+import { getTrustedClientIp } from '@/lib/server/request-ip';
 import { buildPromptPackData } from '@/lib/server/prompt-pack';
 import { renderPromptPackPdf } from '@/lib/server/render-pdf';
 import { sendPromptPackViaWebhook } from '@/lib/server/n8n';
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 export const maxDuration = 10;
 
@@ -31,18 +33,29 @@ export async function POST(request: NextRequest) {
       return auth.response;
     }
 
+    const ip = getTrustedClientIp(request);
+    const rlByParticipant = await checkRateLimit(`email:participant:${auth.payload.participant_id}`, 3, 10 * 60_000);
+    if (!rlByParticipant.allowed) return rateLimitResponse(rlByParticipant.resetAt);
+    const rlByIp = await checkRateLimit(`email:ip:${ip}`, 30, 60_000);
+    if (!rlByIp.allowed) return rateLimitResponse(rlByIp.resetAt);
+
     const supabase = await createServiceClient();
     const authenticatedParticipantId = auth.payload.participant_id;
     const authenticatedSessionId = auth.payload.session_id;
 
     const { data: participant, error: participantError } = await supabase
       .from('participants')
-      .select('id, display_name, session_id, feedback_submitted')
+      .select('id, display_name, session_id, feedback_submitted, prompt_pack_emailed_at')
       .eq('id', authenticatedParticipantId)
       .eq('session_id', authenticatedSessionId)
       .single();
 
     if (participantError || !participant) {
+      console.error('[email/prompt-pack] Participant lookup failed:', {
+        participantId: authenticatedParticipantId,
+        sessionId: authenticatedSessionId,
+        error: participantError,
+      });
       return NextResponse.json(
         { success: false, error: 'Participant not found' },
         { status: 404 }
@@ -54,6 +67,13 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Please submit feedback before receiving your Prompt Pack' },
         { status: 403 }
       );
+    }
+
+    if (participant.prompt_pack_emailed_at) {
+      return NextResponse.json({
+        success: true,
+        message: 'Prompt Pack already sent',
+      });
     }
 
     // Update participant email

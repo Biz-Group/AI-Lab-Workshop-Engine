@@ -31,6 +31,7 @@ const {
   Page,
   View,
   Text,
+  Image,
   StyleSheet,
   renderToBuffer,
 } = nodeRequire('@react-pdf/renderer') as typeof import('@react-pdf/renderer');
@@ -185,8 +186,9 @@ function renderResponse(response: PromptPackEntry['participantResponse']) {
           'No saved text response for this step. The instructions and prompts above are included for reuse later.',
         ),
     response?.imageUrl
-      ? h(Text, { style: [styles.muted, { marginTop: 5 }] },
-          `Image submission captured during session: ${String(response.imageUrl)}`,
+      ? h(View, { style: { marginTop: 8 } },
+          h(Text, { style: [styles.muted, { marginBottom: 4 }] }, 'Your submitted image:'),
+          h(Image, { src: String(response.imageUrl), style: { maxWidth: 300, maxHeight: 200, objectFit: 'contain' } }),
         )
       : null,
   );
@@ -222,7 +224,6 @@ function buildDocument(data: PromptPackData) {
             h(View, {
               key: `${entry.moduleTitle}-${entry.stepTitle}-${si}`,
               style: styles.section,
-              wrap: false,
             },
               h(Text, { style: styles.stepTitle }, String(entry.stepTitle)),
               renderInstructionSections(entry.stepInstructions),

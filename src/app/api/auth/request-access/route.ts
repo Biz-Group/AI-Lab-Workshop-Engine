@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
+function getAllowedAccessRequestOrgIds() {
+  return (process.env.ACCESS_REQUEST_ALLOWED_ORG_IDS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+}
+
 // GET: List available organizations for the request form
 export async function GET() {
   try {
@@ -24,10 +31,16 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Already a team member' }, { status: 409 });
     }
 
-    // List organizations (just id and name)
+    const allowedOrgIds = getAllowedAccessRequestOrgIds();
+    if (allowedOrgIds.length === 0) {
+      return NextResponse.json({ success: true, data: { organizations: [], pendingRequestOrgs: [] } });
+    }
+
+    // List allowlisted organizations only
     const { data: orgs, error } = await serviceClient
       .from('organizations')
       .select('id, name')
+      .in('id', allowedOrgIds)
       .order('name');
 
     if (error) {
@@ -41,7 +54,11 @@ export async function GET() {
       .eq('user_id', user.id)
       .eq('status', 'pending');
 
-    return NextResponse.json({ success: true, data: { organizations: orgs, pendingRequestOrgs: pendingRequests?.map(r => r.organization_id) || [] } });
+    const pendingRequestOrgs = (pendingRequests || [])
+      .map(r => r.organization_id)
+      .filter((orgId) => allowedOrgIds.includes(orgId));
+
+    return NextResponse.json({ success: true, data: { organizations: orgs, pendingRequestOrgs } });
   } catch (error) {
     console.error('Request access GET error:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
@@ -82,6 +99,11 @@ export async function POST(request: NextRequest) {
     }
 
     const { organization_id, display_name } = validation.data;
+    const allowedOrgIds = getAllowedAccessRequestOrgIds();
+
+    if (!allowedOrgIds.includes(organization_id)) {
+      return NextResponse.json({ success: false, error: 'Organization is not accepting self-service access requests' }, { status: 403 });
+    }
 
     // Verify organization exists
     const { data: org } = await serviceClient

@@ -25,6 +25,7 @@ export default async function SessionEndPage({ params }: PageProps) {
     .from('sessions')
     .select(`
       id,
+      client_name,
       organization:organizations(name)
     `)
     .eq('id', sessionId)
@@ -64,7 +65,7 @@ export default async function SessionEndPage({ params }: PageProps) {
   return (
     <SessionEndClient
       sessionId={sessionId}
-      organizationName={getJoinField(session?.organization, 'name') || 'Workshop'}
+      organizationName={session?.client_name || getJoinField(session?.organization, 'name') || 'Workshop'}
       participantId={participant.participant_id}
       participantName={participant.display_name}
       participantEmail={participantData?.email || null}

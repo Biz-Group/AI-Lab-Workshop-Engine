@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = submissionSchema.parse(body);
 
-    const rl = checkRateLimit(`sub:${validatedData.participantId}`, 20, 60_000);
+    const rl = await checkRateLimit(`sub:${validatedData.participantId}`, 20, 60_000);
     if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
     const auth = await requireParticipantSession(request, {

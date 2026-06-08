@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readParticipantSession } from '@/lib/server/participant-session';
+import { getTrustedClientIp } from '@/lib/server/request-ip';
 import { createSessionToken, setSessionTokenCookie } from '@/lib/utils/session-token';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 import { z } from 'zod';
@@ -25,10 +26,16 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = normalizeOptionalEmail(validatedData.email);
     const normalizedDisplayName = validatedData.displayName.trim();
 
-    // Rate limit: 10 join attempts per minute per IP
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const rl = checkRateLimit(`join:${ip}`, 10, 60_000);
-    if (!rl.allowed) return rateLimitResponse(rl.resetAt);
+    // Rate limit: provider-trusted IP + session-scoped + optional email-scoped
+    const ip = getTrustedClientIp(request);
+    const rlByIp = await checkRateLimit(`join:ip:${ip}`, 10, 60_000);
+    if (!rlByIp.allowed) return rateLimitResponse(rlByIp.resetAt);
+    const rlBySessionIp = await checkRateLimit(`join:session-ip:${validatedData.sessionId}:${ip}`, 30, 60_000);
+    if (!rlBySessionIp.allowed) return rateLimitResponse(rlBySessionIp.resetAt);
+    if (normalizedEmail) {
+      const rlByEmail = await checkRateLimit(`join:email:${validatedData.sessionId}:${normalizedEmail}`, 6, 5 * 60_000);
+      if (!rlByEmail.allowed) return rateLimitResponse(rlByEmail.resetAt);
+    }
 
     const supabase = await createServiceClient();
 
@@ -94,6 +101,13 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existingByEmail) {
+        if (!existingParticipantSession || existingParticipantSession.participant_id !== existingByEmail.id) {
+          console.warn(
+            'Accepted risk: email-based rejoin fallback used (possible impersonation vector)',
+            { sessionId: validatedData.sessionId, participantId: existingByEmail.id }
+          );
+        }
+
         const { data: resumedParticipant, error: updateError } = await supabase
           .from('participants')
           .update({
@@ -164,6 +178,14 @@ export async function POST(request: NextRequest) {
         participant_id: participant.id,
         session_id: validatedData.sessionId,
         event_type: 'join_verified',
+        payload: {
+          resumeMethod: participant.id === existingParticipantSession?.participant_id
+            ? 'cookie'
+            : normalizedEmail
+              ? 'email-or-new'
+              : 'new',
+          ip,
+        },
       },
       {
         participant_id: participant.id,

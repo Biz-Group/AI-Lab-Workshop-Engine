@@ -25,6 +25,17 @@ const eventSchema = z.object({
     'feedback_submitted',
   ]),
   payload: z.record(z.unknown()).optional(),
+}).superRefine((data, ctx) => {
+  if (data.payload) {
+    const size = JSON.stringify(data.payload).length;
+    if (size > 4000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Payload too large',
+        path: ['payload'],
+      });
+    }
+  }
 });
 
 export async function POST(request: NextRequest) {
@@ -44,7 +55,7 @@ export async function POST(request: NextRequest) {
     const sessionId = auth.payload.session_id;
 
     // Rate limit: 60 events per minute per participant (analytics fires frequently)
-    const rl = checkRateLimit(`evt:${participantId}`, 60, 60_000);
+    const rl = await checkRateLimit(`evt:${participantId}`, 60, 60_000);
     if (!rl.allowed) return NextResponse.json({ success: true }); // silent drop for analytics
 
     const supabase = await createServiceClient();

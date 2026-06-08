@@ -28,6 +28,7 @@ export async function buildPromptPackData(
     .select(`
       id,
       ended_at,
+      client_name,
       organization:organizations(name),
       workshop_template:workshop_templates(name)
     `)
@@ -89,7 +90,7 @@ export async function buildPromptPackData(
     sessionDate: session.ended_at
       ? new Date(session.ended_at).toLocaleDateString()
       : new Date().toLocaleDateString(),
-    organizationName: readJoinedName(session.organization, 'Organization'),
+    organizationName: session.client_name || readJoinedName(session.organization, 'Organization'),
     workshopName: readJoinedName(session.workshop_template, 'Workshop'),
     entries: mapPromptPackEntries(normalizedModules, submissions ?? []),
   });

@@ -30,13 +30,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (authHeader !== `Bearer ${cronSecret}`) {
-      // Only allow requests without auth header from Supabase's internal scheduler
-      if (authHeader) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // Initialize Supabase client

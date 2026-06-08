@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rl = checkRateLimit(`upload:${participantId}`, 10, 60_000);
+    const rl = await checkRateLimit(`upload:${participantId}`, 10, 60_000);
     if (!rl.allowed) return rateLimitResponse(rl.resetAt);
 
     const supabase = await createServiceClient();

@@ -16,7 +16,11 @@
       "Bash(dir /s /b \"C:\\\\Users\\\\prateek.mishra\\\\OneDrive - bizgroup.ae\\\\Desktop\\\\Workshop Copilot\")",
       "Bash(python3:*)",
       "Bash(python:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\prateek.mishra\\\\OneDrive - bizgroup.ae\\\\Desktop\\\\Workshop Copilot\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table)",
+      "Bash(cd \"/c/Users/prateek.mishra/OneDrive - bizgroup.ae/Desktop/Workshop Copilot\" && find src -type d -name \"lib\" -o -type d -name \"types\" -o -type d -name \"components\" -o -type d -name \"utils\" -o -type d -name \"hooks\")"
     ]
   }
 }

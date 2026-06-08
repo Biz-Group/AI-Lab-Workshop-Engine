@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { normalizeJoinCode } from '@/lib/utils';
+import { getTrustedClientIp } from '@/lib/server/request-ip';
+import { isValidJoinCodeFormat, normalizeJoinCode } from '@/lib/utils';
 import { getJoinField } from '@/lib/utils/supabase-join';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
@@ -16,12 +17,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const rl = checkRateLimit(`verify:${ip}`, 20, 60_000);
-    if (!rl.allowed) return rateLimitResponse(rl.resetAt);
+    if (!isValidJoinCodeFormat(code)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid join code format' },
+        { status: 400 }
+      );
+    }
+
+    const ip = getTrustedClientIp(request);
+    const normalizedCode = normalizeJoinCode(code);
+    const rlByIp = await checkRateLimit(`verify:ip:${ip}`, 20, 60_000);
+    if (!rlByIp.allowed) return rateLimitResponse(rlByIp.resetAt);
+    const rlByCode = await checkRateLimit(`verify:code:${normalizedCode}`, 120, 60_000);
+    if (!rlByCode.allowed) return rateLimitResponse(rlByCode.resetAt);
 
     const supabase = await createServiceClient();
-    const normalizedCode = normalizeJoinCode(code);
 
     // Find session with this join code that is published or live
     const { data: session, error } = await supabase

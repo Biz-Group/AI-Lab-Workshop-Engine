@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Document,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -178,9 +179,10 @@ export function PromptPackDocument({ data }: { data: PromptPackData }) {
                       </Text>
                     )}
                     {entry.participantResponse?.imageUrl && (
-                      <Text style={[styles.muted, { marginTop: 5 }]}>
-                        Image submission captured during session: {String(entry.participantResponse.imageUrl)}
-                      </Text>
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={[styles.muted, { marginBottom: 4 }]}>Your submitted image:</Text>
+                        <Image src={String(entry.participantResponse.imageUrl)} style={{ maxWidth: 300, maxHeight: 200, objectFit: 'contain' }} />
+                      </View>
                     )}
                   </View>
                 </View>

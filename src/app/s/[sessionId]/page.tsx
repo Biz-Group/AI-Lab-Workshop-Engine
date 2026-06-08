@@ -32,6 +32,7 @@ export default async function SessionPage({ params }: PageProps) {
       timer_end_at,
       ai_tool_name,
       ai_tool_url,
+      client_name,
       organization:organizations(id, name, logo_url),
       template:workshop_templates(name, description)
     `)
@@ -126,6 +127,7 @@ export default async function SessionPage({ params }: PageProps) {
         timerEndAt: session.timer_end_at,
         organization: getJoinObject<{ id: string; name: string; logo_url: string | null }>(session.organization) || { id: '', name: '', logo_url: null },
         template: getJoinObject<{ name: string; description: string | null }>(session.template) || { name: '', description: null },
+        clientName: session.client_name,
         aiToolName: session.ai_tool_name ?? 'ChatGPT',
         aiToolUrl: session.ai_tool_url ?? 'https://chat.openai.com',
       }}

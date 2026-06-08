@@ -1,33 +1,10 @@
 import { NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
 
 /**
- * Simple in-memory rate limiter using a sliding window approach.
- * Suitable for single-instance deployments (Vercel serverless).
- * For multi-instance, migrate to Upstash Redis or Vercel KV.
+ * Shared rate limiter backed by Postgres RPC.
+ * Works across multiple serverless instances.
  */
-
-interface RateLimitEntry {
-  timestamps: number[];
-}
-
-const store = new Map<string, RateLimitEntry>();
-
-// Clean up stale entries every 5 minutes
-const CLEANUP_INTERVAL = 5 * 60 * 1000;
-let lastCleanup = Date.now();
-
-function cleanup(windowMs: number) {
-  const now = Date.now();
-  if (now - lastCleanup < CLEANUP_INTERVAL) return;
-  lastCleanup = now;
-
-  for (const [key, entry] of store.entries()) {
-    entry.timestamps = entry.timestamps.filter(t => now - t < windowMs);
-    if (entry.timestamps.length === 0) {
-      store.delete(key);
-    }
-  }
-}
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -41,39 +18,45 @@ export interface RateLimitResult {
  * @param maxRequests Maximum requests allowed in the window
  * @param windowMs Time window in milliseconds (default: 60s)
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   maxRequests: number,
   windowMs: number = 60_000
-): RateLimitResult {
-  cleanup(windowMs);
-
-  const now = Date.now();
-  let entry = store.get(key);
-
-  if (!entry) {
-    entry = { timestamps: [] };
-    store.set(key, entry);
-  }
-
-  // Remove timestamps outside the window
-  entry.timestamps = entry.timestamps.filter(t => now - t < windowMs);
-
-  if (entry.timestamps.length >= maxRequests) {
-    const oldestInWindow = entry.timestamps[0];
-    return {
-      allowed: false,
-      remaining: 0,
-      resetAt: oldestInWindow + windowMs,
-    };
-  }
-
-  entry.timestamps.push(now);
-  return {
+): Promise<RateLimitResult> {
+  const fallback = {
     allowed: true,
-    remaining: maxRequests - entry.timestamps.length,
-    resetAt: now + windowMs,
+    remaining: maxRequests,
+    resetAt: Date.now() + windowMs,
   };
+
+  try {
+    const supabase = await createServiceClient();
+    const { data, error } = await supabase.rpc('consume_rate_limit', {
+      p_key: key,
+      p_max: maxRequests,
+      p_window_seconds: Math.max(1, Math.floor(windowMs / 1000)),
+    });
+
+    if (error || !Array.isArray(data) || data.length === 0) {
+      console.error('Rate limit RPC error:', error);
+      return fallback;
+    }
+
+    const row = data[0] as {
+      allowed: boolean;
+      remaining: number;
+      reset_at: string;
+    };
+
+    return {
+      allowed: row.allowed,
+      remaining: Number.isFinite(row.remaining) ? row.remaining : 0,
+      resetAt: new Date(row.reset_at).getTime(),
+    };
+  } catch (error) {
+    console.error('Rate limit check failed:', error);
+    return fallback;
+  }
 }
 
 /**

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireParticipantSession } from '@/lib/server/participant-session';
+import { getTrustedClientIp } from '@/lib/server/request-ip';
 import { buildPromptPackData } from '@/lib/server/prompt-pack';
 import { renderPromptPackPdf } from '@/lib/server/render-pdf';
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -28,6 +30,12 @@ export async function POST(request: NextRequest) {
     if (auth.response) {
       return auth.response;
     }
+
+    const ip = getTrustedClientIp(request);
+    const rlByParticipant = await checkRateLimit(`pdf:participant:${auth.payload.participant_id}`, 5, 60_000);
+    if (!rlByParticipant.allowed) return rateLimitResponse(rlByParticipant.resetAt);
+    const rlByIp = await checkRateLimit(`pdf:ip:${ip}`, 60, 60_000);
+    if (!rlByIp.allowed) return rateLimitResponse(rlByIp.resetAt);
 
     let promptPack;
     try {
