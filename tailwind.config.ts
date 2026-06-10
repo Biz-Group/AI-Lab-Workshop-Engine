@@ -8,6 +8,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        display: ['var(--font-display)', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
         brand: {
           50: 'var(--brand-50)',
@@ -20,6 +23,11 @@ const config: Config = {
           700: 'var(--brand-700)',
           800: 'var(--brand-800)',
           900: 'var(--brand-900)',
+        },
+        'biz-purple': {
+          DEFAULT: 'var(--biz-purple)',
+          ink: 'var(--biz-purple-ink)',
+          tint: 'var(--biz-purple-tint)',
         },
       },
       backgroundImage: {
