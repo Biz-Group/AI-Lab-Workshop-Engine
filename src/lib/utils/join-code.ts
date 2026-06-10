@@ -1,15 +1,15 @@
 // ============================================================================
 // Join Code Generator
 // Supports two formats:
-// - 6-character alphanumeric for new codes
-// - Legacy 4-character alphanumeric codes remain valid
+// - 4-character alphanumeric codes
+// - Legacy 6-character codes remain valid for existing sessions
 // - Two-word codes (adjective-noun)
 // ============================================================================
 
 // Characters excluding ambiguous ones (I, O, 0, 1)
 const SAFE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const CURRENT_ALPHANUMERIC_CODE_LENGTH = 6;
-const LEGACY_ALPHANUMERIC_CODE_LENGTHS = [4];
+const CURRENT_ALPHANUMERIC_CODE_LENGTH = 4;
+const LEGACY_ALPHANUMERIC_CODE_LENGTHS = [6];
 const VALID_ALPHANUMERIC_CODE_LENGTHS = [
   ...LEGACY_ALPHANUMERIC_CODE_LENGTHS,
   CURRENT_ALPHANUMERIC_CODE_LENGTH,
