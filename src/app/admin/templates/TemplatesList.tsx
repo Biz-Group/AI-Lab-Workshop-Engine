@@ -156,11 +156,11 @@ export function TemplatesList({ templates: initialTemplates }: { templates: Temp
 
   return (
     <>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+      <Card className="overflow-visible">
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 whitespace-nowrap">
                 {columns.map((col) => (
                   <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
                     <button
@@ -178,7 +178,7 @@ export function TemplatesList({ templates: initialTemplates }: { templates: Temp
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.map((template) => (
-                <tr key={template.id} className="hover:bg-gray-50/60 transition-colors">
+                <tr key={template.id} className="hover:bg-gray-50/60 transition-colors whitespace-nowrap">
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{template.name}</div>
                   </td>

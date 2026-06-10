@@ -285,11 +285,11 @@ export default function ModulesPage() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
+              <Card className="overflow-visible">
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
+                      <tr className="border-b border-gray-200 bg-gray-50 whitespace-nowrap">
                         {libColumns.map((col) => (
                           <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
                             <button
@@ -308,7 +308,7 @@ export default function ModulesPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {sortedLibrary.map((activity) => (
-                        <tr key={activity.id} className="hover:bg-gray-50/60 transition-colors">
+                        <tr key={activity.id} className="hover:bg-gray-50/60 transition-colors whitespace-nowrap">
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-900">{activity.title}</div>
                           </td>
@@ -383,11 +383,11 @@ export default function ModulesPage() {
                   ({templateRows.length} across {templates.filter(t => t.modules.length > 0).length} template{templates.filter(t => t.modules.length > 0).length !== 1 ? 's' : ''})
                 </span>
               </div>
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
+              <Card className="overflow-visible">
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
+                      <tr className="border-b border-gray-200 bg-gray-50 whitespace-nowrap">
                         {tmplColumns.map((col) => (
                           <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
                             <button
@@ -406,7 +406,7 @@ export default function ModulesPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {sortedTemplateRows.map((row) => (
-                        <tr key={row.moduleId} className="hover:bg-gray-50/60 transition-colors">
+                        <tr key={row.moduleId} className="hover:bg-gray-50/60 transition-colors whitespace-nowrap">
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-900">{row.templateName}</div>
                           </td>

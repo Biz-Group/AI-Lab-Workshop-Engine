@@ -227,11 +227,11 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
 
   return (
     <>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+      <Card className="overflow-visible">
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 whitespace-nowrap">
                 {columns.map((col) => (
                   <th key={col.key} className="text-left px-4 py-3 font-medium text-gray-600">
                     <button
@@ -244,6 +244,7 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
                     </button>
                   </th>
                 ))}
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Template</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Code</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">POC</th>
                 <th className="px-4 py-3 font-medium text-gray-600 text-right">Actions</th>
@@ -251,7 +252,7 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50/60 transition-colors">
+                <tr key={s.id} className="hover:bg-gray-50/60 transition-colors whitespace-nowrap">
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{s.client_name || '—'}</div>
                     {s.department && (
@@ -272,6 +273,9 @@ export function SessionsTable({ sessions: initialSessions, clients }: SessionsTa
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {formatDateTime(s.created_at)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 text-sm">
+                    {s.template_name}
                   </td>
                   <td className="px-4 py-3">
                     <div className="inline-flex items-center gap-1.5">

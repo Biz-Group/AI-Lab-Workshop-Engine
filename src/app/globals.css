@@ -88,6 +88,21 @@ input, select, textarea {
   background: rgba(255, 255, 255, 0.7);
 }
 
+/* Scrollbar on light backgrounds (admin tables) */
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Workshop-specific styles */
 .workshop-card {
   @apply rounded-xl shadow-sm border border-white/30 p-6 transition-shadow hover:shadow-md;

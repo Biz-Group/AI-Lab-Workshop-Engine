@@ -694,19 +694,19 @@ export function PresenterView({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex min-h-0 overflow-auto">
         {/* Left Panel - Participant List */}
-        <div className="w-72 flex-shrink-0 flex flex-col border-r border-gray-700 overflow-hidden">
+        <div className="w-72 flex-shrink-0 flex flex-col border-r border-gray-700 overflow-y-auto">
           <ParticipantList
             sessionId={session.id}
             allStepIds={allStepIds}
             totalSteps={allSteps.length}
-            className="flex-1 overflow-hidden"
+            className="flex-1 overflow-y-auto"
           />
         </div>
 
         {/* Center-Left Panel - Join Code & Stats */}
-        <div className="w-72 flex-shrink-0 bg-gray-800 p-6 flex flex-col border-r border-gray-700">
+        <div className="w-72 flex-shrink-0 bg-gray-800 p-6 flex flex-col border-r border-gray-700 overflow-y-auto">
           {/* Join Code */}
           <div className="text-center mb-8">
             <p className="text-gray-400 text-sm mb-2">JOIN CODE</p>
@@ -837,7 +837,7 @@ export function PresenterView({
         </div>
 
         {/* Center Panel - Current Step */}
-        <div className="flex-1 flex flex-col p-8">
+        <div className="flex-1 flex flex-col p-8 overflow-y-auto">
           {session.status !== 'live' ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
