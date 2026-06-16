@@ -385,7 +385,7 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
             )}
 
             {/* Submission placeholder (for required steps or last step) */}
-            {(currentStep.show_response_field !== false) && (currentStep.is_required || isLastStep) && (
+            {(currentStep.show_response_field === true || (currentStep.show_response_field !== false && (currentStep.is_required || isLastStep))) && (
               <Card className="shadow-sm">
                 <CardContent className="p-6">
                   <h3 className="font-medium text-gray-900 mb-3">
