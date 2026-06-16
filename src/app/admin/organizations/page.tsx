@@ -1,4 +1,5 @@
 import Link from 'next/link';
+/* eslint-disable @next/next/no-img-element */
 import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server';
 import { Building2, Mail } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui';

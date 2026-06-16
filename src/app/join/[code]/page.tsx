@@ -168,8 +168,7 @@ export default function JoinWithCodePage() {
                 src="/biz-group-logo.webp"
                 alt="Biz Group"
                 width={56}
-                height={56}
-                style={{ width: 'auto', height: 'auto' }}
+                height={54}
                 className="mx-auto mb-4 rounded-lg"
               />
               <div className="inline-flex items-center justify-center px-4 py-2 bg-brand-100 text-brand-700 rounded-full text-sm font-medium mb-4">

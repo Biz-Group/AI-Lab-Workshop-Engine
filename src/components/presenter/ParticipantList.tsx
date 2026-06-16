@@ -270,10 +270,10 @@ export const ParticipantList = memo(function ParticipantList({
       });
       const data = await res.json();
       if (!data.success) {
-        console.error('Failed to persist stuck dismissal:', data.error);
+        toast.error(data.error || 'Failed to dismiss stuck signal');
       }
-    } catch (err) {
-      console.error('Failed to persist stuck dismissal:', err);
+    } catch {
+      toast.error('Failed to dismiss stuck signal');
     }
   };
 

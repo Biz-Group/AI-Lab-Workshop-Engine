@@ -162,13 +162,14 @@ function PreviewPromptBlock({ title, content, isCopyable, index }: {
 // ─── Main Preview ───────────────────────────────────────────────────────
 export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT', aiToolUrl = 'https://chat.openai.com', onClose }: TemplatePreviewProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [portalTarget] = useState<HTMLElement | null>(() =>
+    typeof document === 'undefined' ? null : document.body
+  );
 
   // Lock body scroll while preview is open & set portal target
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    setPortalTarget(document.body);
     return () => { document.body.style.overflow = prev; };
   }, []);
 

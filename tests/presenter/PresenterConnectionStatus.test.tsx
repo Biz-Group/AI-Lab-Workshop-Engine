@@ -244,7 +244,7 @@ beforeEach(() => {
   global.fetch = vi.fn(async () => ({
     ok: true,
     json: async () => ({ success: true, data: [] }),
-  })) as typeof fetch;
+  })) as unknown as typeof fetch;
 });
 
 afterEach(() => {

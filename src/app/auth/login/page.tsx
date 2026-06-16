@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft } from 'lucide-react';
@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const rawRedirect = searchParams.get('redirect') || '/admin';
   // Only allow relative paths to prevent open redirect
@@ -35,8 +34,8 @@ function LoginForm() {
         if (user) {
           setAlreadyLoggedIn(true);
         }
-      } catch (err) {
-        console.error('Auth check error:', err);
+      } catch {
+        setAlreadyLoggedIn(false);
       } finally {
         setCheckingAuth(false);
       }
@@ -120,7 +119,6 @@ function LoginForm() {
       const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
       setError(errorMessage);
       toast.error(errorMessage);
-      console.error('Auth error:', err);
       setIsLoading(false);
     }
   };
@@ -149,7 +147,7 @@ function LoginForm() {
               <div className="text-center space-y-6">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 mb-2">Already Signed In</h1>
-                  <p className="text-gray-600">You're already authenticated</p>
+                  <p className="text-gray-600">You&apos;re already authenticated</p>
                 </div>
                 
                 <div className="space-y-3">
@@ -171,7 +169,7 @@ function LoginForm() {
                     variant="outline"
                     className="w-full"
                   >
-                    Sign Out & Login with Different Account
+                    Sign Out &amp; Login with Different Account
                   </Button>
                 </div>
               </div>
@@ -182,8 +180,7 @@ function LoginForm() {
                     src="/biz-group-logo.webp"
                     alt="Biz Group"
                     width={64}
-                    height={64}
-                    style={{ width: 'auto', height: 'auto' }}
+                    height={62}
                     className="mx-auto mb-4 rounded-lg"
                   />
                   <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -262,7 +259,7 @@ function LoginForm() {
                       : 'Already have an account? Sign in'}
                   </button>
                   <p>
-                    Don't have access?{' '}
+                    Don&apos;t have access?{' '}
                     <a href="mailto:support@example.com" className="text-brand-600 hover:underline">
                       Contact us
                     </a>

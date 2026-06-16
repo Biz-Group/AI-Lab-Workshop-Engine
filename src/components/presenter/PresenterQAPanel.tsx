@@ -139,7 +139,7 @@ export const PresenterQAPanel = memo(function PresenterQAPanel({
                           </button>
                         </div>
                         <p className="text-xs text-gray-300 mb-1">{question.question_text}</p>
-                        <p className="text-xs text-green-400">↳ {question.answer_text}</p>
+                        <p className="text-xs text-green-400">Answer: {question.answer_text}</p>
                       </div>
                     ))}
                   </div>

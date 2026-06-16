@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import {
   useState,
   useEffect,
@@ -265,7 +267,9 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
 
   // Initial fetch
   useEffect(() => {
-    fetchAll();
+    queueMicrotask(() => {
+      void fetchAll();
+    });
   }, [fetchAll]);
 
   useEffect(() => {
@@ -316,12 +320,12 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
 
     const updatedSelected = images.find((img) => img.id === selectedImage.id);
     if (!updatedSelected) {
-      setSelectedImage(null);
+      queueMicrotask(() => setSelectedImage(null));
       return;
     }
 
     if (updatedSelected !== selectedImage) {
-      setSelectedImage(updatedSelected);
+      queueMicrotask(() => setSelectedImage(updatedSelected));
     }
   }, [images, selectedImage]);
 

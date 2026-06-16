@@ -1,0 +1,89 @@
+[
+  {
+    "route": "/",
+    "wallLoadMs": {
+      "avg": 436,
+      "p80": 265,
+      "min": 234,
+      "max": 1197
+    },
+    "domContentLoadedMs": {
+      "avg": 212,
+      "p80": 139,
+      "min": 55,
+      "max": 745
+    },
+    "browserLoadMs": {
+      "avg": 429,
+      "p80": 258,
+      "min": 230,
+      "max": 1180
+    },
+    "ttfbMs": {
+      "avg": 117,
+      "p80": 20,
+      "min": 13,
+      "max": 521
+    },
+    "resourceCountAvg": 11,
+    "transferKbAvg": 204
+  },
+  {
+    "route": "/join",
+    "wallLoadMs": {
+      "avg": 297,
+      "p80": 346,
+      "min": 237,
+      "max": 414
+    },
+    "domContentLoadedMs": {
+      "avg": 77,
+      "p80": 68,
+      "min": 52,
+      "max": 130
+    },
+    "browserLoadMs": {
+      "avg": 294,
+      "p80": 343,
+      "min": 233,
+      "max": 410
+    },
+    "ttfbMs": {
+      "avg": 18,
+      "p80": 21,
+      "min": 12,
+      "max": 24
+    },
+    "resourceCountAvg": 14,
+    "transferKbAvg": 228
+  },
+  {
+    "route": "/auth/login",
+    "wallLoadMs": {
+      "avg": 253,
+      "p80": 266,
+      "min": 231,
+      "max": 276
+    },
+    "domContentLoadedMs": {
+      "avg": 71,
+      "p80": 83,
+      "min": 50,
+      "max": 106
+    },
+    "browserLoadMs": {
+      "avg": 249,
+      "p80": 261,
+      "min": 229,
+      "max": 271
+    },
+    "ttfbMs": {
+      "avg": 19,
+      "p80": 20,
+      "min": 10,
+      "max": 43
+    },
+    "resourceCountAvg": 14,
+    "transferKbAvg": 279
+  }
+]

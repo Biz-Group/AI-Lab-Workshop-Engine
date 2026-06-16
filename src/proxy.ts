@@ -3,7 +3,7 @@ import { updateSession } from '@/lib/supabase/middleware';
 
 export async function proxy(request: NextRequest) {
   // Update Supabase session
-  let response = await updateSession(request);
+  const response = await updateSession(request);
 
   // Check if user is authenticated by looking for Supabase session cookies
   const cookieStore = request.cookies;

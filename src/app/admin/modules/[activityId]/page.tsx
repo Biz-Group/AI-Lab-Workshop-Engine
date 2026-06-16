@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Save,
   Pencil,
   Plus,
   Trash2,
@@ -275,7 +274,7 @@ export default function LibraryActivityEditorPage({ params }: { params: Promise<
           ))
         )}
 
-        <AddLibraryStepButton activityId={activityId!} currentCount={activity.steps.length} onAdded={handleStepAdded} />
+        <AddLibraryStepButton activityId={activityId!} onAdded={handleStepAdded} />
       </div>
 
       {/* Edit Header Modal */}
@@ -464,7 +463,7 @@ function LibraryStepRow({ step, activityId, onStepUpdated, onStepDeleted, onBloc
                   />
                 ))
               )}
-              <AddLibraryBlockButton activityId={activityId} stepId={step.id} currentCount={step.prompt_blocks.length} onAdded={(newBlock) => onBlockAdded(step.id, newBlock)} />
+              <AddLibraryBlockButton activityId={activityId} stepId={step.id} onAdded={(newBlock) => onBlockAdded(step.id, newBlock)} />
             </div>
           </div>
         )}
@@ -630,9 +629,8 @@ function LibraryBlockRow({ block, activityId, stepId, onBlockUpdated, onBlockDel
 }
 
 // ─── Add Step Button ────────────────────────────────────────────────────
-function AddLibraryStepButton({ activityId, currentCount, onAdded }: {
+function AddLibraryStepButton({ activityId, onAdded }: {
   activityId: string;
-  currentCount: number;
   onAdded: (newStep: Step) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -734,10 +732,9 @@ function AddLibraryStepButton({ activityId, currentCount, onAdded }: {
 }
 
 // ─── Add Block Button ───────────────────────────────────────────────────
-function AddLibraryBlockButton({ activityId, stepId, currentCount, onAdded }: {
+function AddLibraryBlockButton({ activityId, stepId, onAdded }: {
   activityId: string;
   stepId: string;
-  currentCount: number;
   onAdded: (newBlock: PromptBlock) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);

@@ -8,7 +8,7 @@ import {
   ArrowRight,
   Clock
 } from 'lucide-react';
-import { Card, CardContent, Button } from '@/components/ui';
+import { Card, CardContent } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 import { getJoinField } from '@/lib/utils/supabase-join';
 

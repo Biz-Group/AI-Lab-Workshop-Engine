@@ -74,8 +74,7 @@ export default function JoinPage() {
                 src="/biz-group-logo.webp"
                 alt="Biz Group"
                 width={64}
-                height={64}
-                style={{ width: 'auto', height: 'auto' }}
+                height={62}
                 className="mx-auto mb-4 rounded-lg"
               />
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -143,7 +142,7 @@ export default function JoinPage() {
 
             <div className="mt-8 pt-6 border-t border-gray-200 text-center">
               <p className="text-sm text-gray-500">
-                Don't have a code? Ask your workshop facilitator.
+                Don&apos;t have a code? Ask your workshop facilitator.
               </p>
             </div>
           </CardContent>

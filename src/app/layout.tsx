@@ -10,7 +10,7 @@ const montserrat = Montserrat({
   display: 'swap',
 });
 
-const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Biz Group Workshop Copilot';
+const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Biz Group AI Lab';
 
 export const metadata: Metadata = {
   title: {

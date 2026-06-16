@@ -646,8 +646,7 @@ export function PresenterView({
             src="/biz-group-logo.webp"
             alt="Biz Group"
             width={32}
-            height={32}
-            style={{ width: 'auto', height: 'auto' }}
+            height={31}
             className="rounded"
           />
           <div>

@@ -15,7 +15,6 @@ interface FeedbackFormProps {
 export function FeedbackForm({ 
   sessionId, 
   participantId,
-  participantName,
   onFeedbackSubmitted 
 }: FeedbackFormProps) {
   const [rating, setRating] = useState<number>(0);

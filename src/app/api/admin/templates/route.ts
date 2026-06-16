@@ -10,7 +10,7 @@ const createTemplateSchema = z.object({
   is_published: z.boolean().default(false),
 });
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createServerClient();
 

@@ -26,7 +26,7 @@ describe('HomePage', () => {
   describe('rendering', () => {
     it('renders brand logo dots and name', () => {
       render(<HomePage />);
-      expect(screen.getByText('Workshop Copilot')).toBeTruthy();
+      expect(screen.getByText('The AI Lab')).toBeTruthy();
       expect(screen.getByText('by Biz Group')).toBeTruthy();
     });
 
@@ -161,7 +161,6 @@ describe('HomePage', () => {
     it('focuses first empty cell when submitting incomplete code', () => {
       render(<HomePage />);
       const input1 = screen.getByLabelText('Join code character 1') as HTMLInputElement;
-      const input3 = screen.getByLabelText('Join code character 3') as HTMLInputElement;
 
       fireEvent.change(input1, { target: { value: 'K' } });
       // input2 is empty, input3 and 4 are empty

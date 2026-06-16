@@ -44,15 +44,20 @@ export function NarrativeProgressMap({
   isClickable = false,
   className,
 }: NarrativeProgressMapProps) {
-  const [expandedModules, setExpandedModules] = useState<Set<number>>(new Set());
+  const [expandedModules, setExpandedModules] = useState<Set<number>>(() => {
+    const currentStep = steps.find(s => s.status === 'current');
+    return currentStep ? new Set([currentStep.moduleIndex]) : new Set();
+  });
   const [animatingStep, setAnimatingStep] = useState<string | null>(null);
 
   // Auto-expand the module containing the current step
   useEffect(() => {
     const currentStep = steps.find(s => s.status === 'current');
-    if (currentStep) {
+    if (!currentStep) return;
+    const timer = window.setTimeout(() => {
       setExpandedModules(prev => new Set([...prev, currentStep.moduleIndex]));
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [steps]);
 
   const toggleModule = (moduleIndex: number) => {

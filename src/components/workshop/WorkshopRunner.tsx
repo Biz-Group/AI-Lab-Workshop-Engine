@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -510,8 +512,7 @@ export function WorkshopRunner({
               src="/biz-group-logo.webp"
               alt="Biz Group"
               width={32}
-              height={32}
-              style={{ width: 'auto', height: 'auto' }}
+              height={31}
               className="rounded"
             />
             <h2 className="font-semibold text-gray-900 text-sm">{session.template.name}</h2>

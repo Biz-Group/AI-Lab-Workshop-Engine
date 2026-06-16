@@ -34,6 +34,8 @@ export class OpenAIProvider implements AIProvider {
     messages: ChatMessage[],
     options?: CompletionOptions
   ): Promise<CompletionResponse> {
+    void messages;
+    void options;
     if (!this.isAvailable()) {
       throw new AIProviderNotAvailableError(this.name);
     }
@@ -89,6 +91,7 @@ export class OpenAIProvider implements AIProvider {
   async suggestPromptImprovements(
     prompt: string
   ): Promise<PromptSuggestion[]> {
+    void prompt;
     if (!this.isAvailable()) {
       throw new AIProviderNotAvailableError(this.name);
     }
@@ -117,6 +120,7 @@ export class OpenAIProvider implements AIProvider {
   async clusterPrompts(
     prompts: string[]
   ): Promise<PromptCluster[]> {
+    void prompts;
     if (!this.isAvailable()) {
       throw new AIProviderNotAvailableError(this.name);
     }
@@ -142,6 +146,8 @@ export class OpenAIProvider implements AIProvider {
       participantCount: number;
     }
   ): Promise<SessionSummary> {
+    void submissions;
+    void context;
     if (!this.isAvailable()) {
       throw new AIProviderNotAvailableError(this.name);
     }

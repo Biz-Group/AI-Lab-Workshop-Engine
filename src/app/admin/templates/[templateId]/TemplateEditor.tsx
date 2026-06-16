@@ -97,7 +97,7 @@ async function persistReorder(table: 'modules' | 'module_steps' | 'prompt_blocks
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
-  } catch (err) {
+  } catch {
     toast.error('Failed to save order');
   }
 }
@@ -596,7 +596,7 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
           </div>
         )}
 
-        <AddModuleButton templateId={template.id} currentCount={template.modules.length} onAdded={handleModuleAdded} />
+        <AddModuleButton templateId={template.id} onAdded={handleModuleAdded} />
       </div>
 
       {/* Template Preview */}
@@ -614,9 +614,8 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
 }
 
 // ─── Add Module Button ──────────────────────────────────────────────────
-function AddModuleButton({ templateId, currentCount, onAdded }: {
+function AddModuleButton({ templateId, onAdded }: {
   templateId: string;
-  currentCount: number;
   onAdded: (newModule: { id: string; title: string; objective: string | null; order_index: number; steps?: Step[] }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -875,7 +874,7 @@ function SortableModuleCard(props: {
 }
 
 // ─── Module Card (collapsible) ──────────────────────────────────────────
-function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, sensors, isExpanded, onToggleExpand, allModules, onModuleAdded, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
+function ModuleCard({ module: mod, displayIndex, dragHandleProps, sensors, isExpanded, onToggleExpand, allModules, onModuleAdded, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
   module: Module;
   displayIndex: number;
   templateId: string;
@@ -1106,7 +1105,7 @@ function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, se
                 </div>
               )}
               <div className="pl-4">
-                <AddStepButton moduleId={mod.id} currentCount={mod.steps.length} onAdded={(newStep) => onStepAdded(mod.id, newStep)} />
+                <AddStepButton moduleId={mod.id} onAdded={(newStep) => onStepAdded(mod.id, newStep)} />
               </div>
             </div>
           </div>
@@ -1440,7 +1439,7 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
                 </SortableContext>
               </DndContext>
             )}
-            <AddPromptBlockButton stepId={step.id} currentCount={step.prompt_blocks.length} onAdded={(newBlock) => onBlockAdded(moduleId, step.id, newBlock)} />
+            <AddPromptBlockButton stepId={step.id} onAdded={(newBlock) => onBlockAdded(moduleId, step.id, newBlock)} />
           </div>
         </div>
       )}
@@ -1733,9 +1732,8 @@ function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockAdded
 }
 
 // ─── Add Step Button ────────────────────────────────────────────────────
-function AddStepButton({ moduleId, currentCount, onAdded }: {
+function AddStepButton({ moduleId, onAdded }: {
   moduleId: string;
-  currentCount: number;
   onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -1863,9 +1861,8 @@ function AddStepButton({ moduleId, currentCount, onAdded }: {
 }
 
 // ─── Add Prompt Block Button ────────────────────────────────────────────
-function AddPromptBlockButton({ stepId, currentCount, onAdded }: {
+function AddPromptBlockButton({ stepId, onAdded }: {
   stepId: string;
-  currentCount: number;
   onAdded: (newBlock: { id: string; title: string; order_index: number; content_markdown: string; is_copyable: boolean }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);

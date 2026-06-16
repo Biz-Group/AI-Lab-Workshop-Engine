@@ -4,7 +4,7 @@
  * Run with: npm test
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { 
   generateJoinCode, 
   generateTwoWordCode, 
@@ -21,9 +21,9 @@ import { cn, formatDate, truncate, getTimeRemaining, percentage } from '../src/l
 
 describe('Join Code Utils', () => {
   describe('generateJoinCode', () => {
-    it('should generate a 6-character alphanumeric code by default', () => {
+    it('should generate a 4-character alphanumeric code by default', () => {
       const code = generateJoinCode();
-      expect(code).toHaveLength(6);
+      expect(code).toHaveLength(4);
       expect(code).toMatch(/^[A-HJ-NP-Z2-9]+$/);
     });
 
@@ -223,9 +223,12 @@ describe('Common Utils', () => {
     });
 
     it('should include hours for long durations', () => {
-      const result = getTimeRemaining(new Date(Date.now() + 90 * 60 * 1000)); // 90 min
+      const now = new Date('2026-01-01T00:00:00Z').getTime();
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+      const result = getTimeRemaining(new Date(now + 90 * 60 * 1000)); // 90 min
       expect(result.hours).toBe(1);
       expect(result.minutes).toBe(30);
+      nowSpy.mockRestore();
     });
   });
 

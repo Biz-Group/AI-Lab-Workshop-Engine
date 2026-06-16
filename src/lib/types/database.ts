@@ -44,7 +44,7 @@ export interface OrganizationInsert {
   logo_url?: string | null;
 }
 
-export interface OrganizationUpdate extends Partial<OrganizationInsert> {}
+export type OrganizationUpdate = Partial<OrganizationInsert>;
 
 // ============================================================================
 // Facilitator Types

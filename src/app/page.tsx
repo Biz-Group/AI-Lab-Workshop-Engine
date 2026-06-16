@@ -138,7 +138,7 @@ export default function HomePage() {
             <span className="w-3 h-3 rounded-full bg-[#F58220]" />
           </span>
           <span className="leading-none">
-            <div className="font-display font-extrabold text-[21px] tracking-tight text-white">Workshop Copilot</div>
+            <div className="font-display font-extrabold text-[21px] tracking-tight text-white">The AI Lab</div>
             <div className="font-bold text-[10px] tracking-[0.16em] uppercase text-white/60 mt-[3px]">by Biz Group</div>
           </span>
         </div>

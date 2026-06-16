@@ -61,7 +61,8 @@ export async function PATCH(
       );
     }
 
-    const sessionOrg = (participant.session as any)?.organization_id;
+    const session = participant.session as { organization_id: string } | { organization_id: string }[] | null;
+    const sessionOrg = Array.isArray(session) ? session[0]?.organization_id : session?.organization_id;
     if (sessionOrg !== facilitator.organization_id) {
       return NextResponse.json(
         { success: false, error: 'Access denied' },

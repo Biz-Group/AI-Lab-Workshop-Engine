@@ -376,8 +376,7 @@ export function SessionEndClient({
             src="/biz-group-logo.webp"
             alt="Biz Group"
             width={48}
-            height={48}
-            style={{ width: 'auto', height: 'auto' }}
+            height={47}
             className="mx-auto mb-3 rounded-lg"
           />
           <p className="text-white/70 mb-2">

@@ -10,11 +10,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-interface Env {
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
-}
-
 Deno.serve(async (req: Request) => {
   try {
     // Verify request (require CRON_SECRET for any non-scheduler call)

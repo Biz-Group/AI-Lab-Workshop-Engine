@@ -24,6 +24,41 @@ const duplicateSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+interface DuplicatePromptBlockRow {
+  title: string;
+  content_markdown: string;
+  is_copyable: boolean;
+  order_index: number;
+}
+
+interface DuplicateStepRow {
+  title: string;
+  instruction_markdown: string;
+  estimated_minutes: number | null;
+  is_required: boolean;
+  order_index: number;
+  ai_tool_name: string | null;
+  ai_tool_url: string | null;
+  prompt_blocks?: DuplicatePromptBlockRow[] | null;
+}
+
+interface DuplicateModuleRow {
+  title: string;
+  objective: string | null;
+  order_index: number;
+  template_id?: string;
+  steps?: DuplicateStepRow[] | null;
+}
+
+interface InsertedPromptBlockRow extends DuplicatePromptBlockRow {
+  id: string;
+}
+
+interface InsertedStepRow extends DuplicateStepRow {
+  id: string;
+  prompt_blocks?: InsertedPromptBlockRow[];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient();
@@ -94,7 +129,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Deep copy modules → steps → blocks
-      const modules = ((tmpl.modules as any[]) || []).sort((a: any, b: any) => a.order_index - b.order_index);
+      const modules = ((tmpl.modules as DuplicateModuleRow[] | null) || []).sort((a, b) => a.order_index - b.order_index);
       for (const mod of modules) {
         const { data: newMod } = await serviceClient
           .from('modules')
@@ -109,7 +144,7 @@ export async function POST(request: NextRequest) {
 
         if (!newMod) continue;
 
-        const steps = (mod.steps || []).sort((a: any, b: any) => a.order_index - b.order_index);
+        const steps = (mod.steps || []).sort((a, b) => a.order_index - b.order_index);
         for (const step of steps) {
           const { data: newStep } = await serviceClient
             .from('module_steps')
@@ -128,11 +163,11 @@ export async function POST(request: NextRequest) {
 
           if (!newStep) continue;
 
-          const blocks = (step.prompt_blocks || []).sort((a: any, b: any) => a.order_index - b.order_index);
+          const blocks = (step.prompt_blocks || []).sort((a, b) => a.order_index - b.order_index);
           if (blocks.length > 0) {
             await serviceClient
               .from('prompt_blocks')
-              .insert(blocks.map((b: any) => ({
+              .insert(blocks.map((b) => ({
                 step_id: newStep.id,
                 title: b.title,
                 content_markdown: b.content_markdown,
@@ -189,8 +224,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Copy steps and blocks
-      const steps = ((mod.steps as any[]) || []).sort((a: any, b: any) => a.order_index - b.order_index);
-      const newSteps: any[] = [];
+      const steps = ((mod.steps as DuplicateStepRow[] | null) || []).sort((a, b) => a.order_index - b.order_index);
+      const newSteps: InsertedStepRow[] = [];
       for (const step of steps) {
         const { data: newStep } = await serviceClient
           .from('module_steps')
@@ -209,12 +244,12 @@ export async function POST(request: NextRequest) {
 
         if (!newStep) continue;
 
-        const blocks = (step.prompt_blocks || []).sort((a: any, b: any) => a.order_index - b.order_index);
-        let newBlocks: any[] = [];
+        const blocks = (step.prompt_blocks || []).sort((a, b) => a.order_index - b.order_index);
+        let newBlocks: InsertedPromptBlockRow[] = [];
         if (blocks.length > 0) {
           const { data: insertedBlocks } = await serviceClient
             .from('prompt_blocks')
-            .insert(blocks.map((b: any) => ({
+            .insert(blocks.map((b) => ({
               step_id: newStep.id,
               title: b.title,
               content_markdown: b.content_markdown,
@@ -222,7 +257,7 @@ export async function POST(request: NextRequest) {
               order_index: b.order_index,
             })))
             .select('id, title, content_markdown, is_copyable, order_index');
-          newBlocks = insertedBlocks || [];
+          newBlocks = (insertedBlocks as InsertedPromptBlockRow[] | null) || [];
         }
 
         newSteps.push({ ...newStep, prompt_blocks: newBlocks });
@@ -273,12 +308,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Failed to duplicate step' }, { status: 500 });
       }
 
-      const blocks = (step.prompt_blocks as any[]) || [];
-      let newBlocks: any[] = [];
+      const blocks = (step.prompt_blocks as DuplicatePromptBlockRow[] | null) || [];
+      let newBlocks: InsertedPromptBlockRow[] = [];
       if (blocks.length > 0) {
         const { data: insertedBlocks } = await serviceClient
           .from('prompt_blocks')
-          .insert(blocks.map((b: any) => ({
+          .insert(blocks.map((b) => ({
             step_id: newStep.id,
             title: b.title,
             content_markdown: b.content_markdown,
@@ -286,7 +321,7 @@ export async function POST(request: NextRequest) {
             order_index: b.order_index,
           })))
           .select('id, title, content_markdown, is_copyable, order_index');
-        newBlocks = insertedBlocks || [];
+        newBlocks = (insertedBlocks as InsertedPromptBlockRow[] | null) || [];
       }
 
       revalidatePath('/admin/templates');

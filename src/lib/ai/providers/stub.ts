@@ -31,6 +31,8 @@ export class StubAIProvider implements AIProvider {
     _messages: ChatMessage[],
     _options?: CompletionOptions
   ): Promise<CompletionResponse> {
+    void _messages;
+    void _options;
     // TODO: In v2, replace with actual AI provider call
     throw new AIProviderNotAvailableError(this.name);
   }

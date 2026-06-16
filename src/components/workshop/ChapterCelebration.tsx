@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Trophy, Sparkles, Star, Swords, PartyPopper } from 'lucide-react';
+import { Trophy, Sparkles, Star, PartyPopper } from 'lucide-react';
 
 interface ChapterCelebrationProps {
   chapterTitle: string;
@@ -27,6 +27,15 @@ function ConfettiParticle({ delay, color, left }: { delay: number; color: string
   );
 }
 
+function createConfettiParticles() {
+  const colors = ['#75BD66', '#197CBB', '#F59E0B', '#EC4899', '#8B5CF6', '#EF4444', '#10B981'];
+  return Array.from({ length: 30 }, () => ({
+    delay: Math.random() * 1000,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    left: Math.random() * 100,
+  }));
+}
+
 export function ChapterCelebration({
   chapterTitle,
   chapterNumber,
@@ -36,22 +45,16 @@ export function ChapterCelebration({
   onDismiss,
 }: ChapterCelebrationProps) {
   const [isVisible, setIsVisible] = useState(false);
-  const [particles, setParticles] = useState<{ delay: number; color: string; left: number }[]>([]);
+  const [particles] = useState(createConfettiParticles);
   const isDismissing = React.useRef(false);
   const onDismissRef = React.useRef(onDismiss);
-  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
 
   useEffect(() => {
     isDismissing.current = false;
-
-    // Generate confetti particles
-    const colors = ['#75BD66', '#197CBB', '#F59E0B', '#EC4899', '#8B5CF6', '#EF4444', '#10B981'];
-    const newParticles = Array.from({ length: 30 }, () => ({
-      delay: Math.random() * 1000,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      left: Math.random() * 100,
-    }));
-    setParticles(newParticles);
 
     // Animate in
     requestAnimationFrame(() => setIsVisible(true));
@@ -66,7 +69,7 @@ export function ChapterCelebration({
     }, 4000);
 
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDismiss = useCallback(() => {
     if (isDismissing.current) return;

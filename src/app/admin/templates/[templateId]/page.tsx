@@ -8,6 +8,34 @@ interface PageProps {
   params: Promise<{ templateId: string }>;
 }
 
+interface TemplatePromptBlockRow {
+  id: string;
+  title: string;
+  content_markdown: string;
+  is_copyable: boolean;
+  order_index: number;
+}
+
+interface TemplateStepRow {
+  id: string;
+  title: string;
+  instruction_markdown: string;
+  estimated_minutes: number | null;
+  is_required: boolean;
+  order_index: number;
+  ai_tool_name: string | null;
+  ai_tool_url: string | null;
+  prompt_blocks?: TemplatePromptBlockRow[] | null;
+}
+
+interface TemplateModuleRow {
+  id: string;
+  title: string;
+  objective: string | null;
+  order_index: number;
+  steps?: TemplateStepRow[] | null;
+}
+
 export default async function TemplateDetailPage({ params }: PageProps) {
   const { templateId } = await params;
   const supabase = await createServerClient();
@@ -68,16 +96,16 @@ export default async function TemplateDetailPage({ params }: PageProps) {
   // Sort nested arrays by order_index
   const sortedTemplate = {
     ...template,
-    modules: ((template.modules as any[]) || [])
-      .sort((a: any, b: any) => a.order_index - b.order_index)
-      .map((mod: any) => ({
+    modules: ((template.modules as TemplateModuleRow[] | null) || [])
+      .sort((a, b) => a.order_index - b.order_index)
+      .map((mod) => ({
         ...mod,
         steps: (mod.steps || [])
-          .sort((a: any, b: any) => a.order_index - b.order_index)
-          .map((step: any) => ({
+          .sort((a, b) => a.order_index - b.order_index)
+          .map((step) => ({
             ...step,
             prompt_blocks: (step.prompt_blocks || [])
-              .sort((a: any, b: any) => a.order_index - b.order_index),
+              .sort((a, b) => a.order_index - b.order_index),
           })),
       })),
   };
