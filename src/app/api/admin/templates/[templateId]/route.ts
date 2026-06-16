@@ -71,6 +71,9 @@ export async function GET(
             order_index,
             estimated_minutes,
             is_required,
+            show_response_field,
+            ai_tool_name,
+            ai_tool_url,
             prompt_blocks(
               id,
               title,

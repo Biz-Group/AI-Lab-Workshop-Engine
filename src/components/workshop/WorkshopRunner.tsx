@@ -51,6 +51,7 @@ interface Step {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field?: boolean;
   ai_tool_name?: string;
   ai_tool_url?: string;
   prompt_blocks: PromptBlockType[];
@@ -658,8 +659,8 @@ export function WorkshopRunner({
               Open {currentStep?.ai_tool_name || initialSession.aiToolName || 'ChatGPT'}
             </Button>
 
-            {/* Submission Area (for required steps or last step) */}
-            {(currentStep.is_required || isLastStep) && (
+            {/* Submission Area */}
+            {currentStep.show_response_field && (currentStep.is_required || isLastStep) && (
               <Card>
                 <CardContent className="p-6 space-y-4">
                   <h3 className="font-medium text-gray-900">

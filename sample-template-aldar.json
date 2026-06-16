@@ -1,0 +1,308 @@
+{
+  "template": {
+    "name": "Super Agents 101 - Aldar Properties",
+    "description": "Hands-on workshop covering Prompt Engineering and Microsoft Copilot for Aldar Properties teams. Participants will learn to craft better prompts, build custom agents, and leverage Copilot across Word, Excel, and PowerPoint.",
+    "estimated_duration_minutes": 180,
+    "ai_tool_name": "Microsoft Copilot",
+    "ai_tool_url": "https://m365.cloud.microsoft/chat",
+    "is_published": false
+  },
+
+  "modules": [
+
+    {
+      "title": "Prompt Engineering - Fix The Prompt",
+      "objective": "Understand the foundations of prompt engineering and practice improving weak prompts using a structured framework.",
+      "order_index": 0,
+      "steps": [
+        {
+          "title": "Choose a prompt to improve",
+          "instruction_markdown": "Pick one of the prompts below. Your goal is to rewrite it using the prompting framework covered in the session - add role, context, format, tone, and constraints to make it significantly more effective.",
+          "order_index": 0,
+          "estimated_minutes": 10,
+          "is_required": true,
+          "prompt_blocks": [
+            {
+              "title": "Option A - Social Media",
+              "content_markdown": "Create a social media post promoting a newly launched residential community on Yas Island.",
+              "order_index": 0,
+              "is_copyable": true
+            },
+            {
+              "title": "Option B - Audit Report",
+              "content_markdown": "Write a report summarising last month's contractor worker-welfare audit programme and supplier compliance results.",
+              "order_index": 1,
+              "is_copyable": true
+            },
+            {
+              "title": "Option C - Training Module",
+              "content_markdown": "Create a training module for site handover teams on managing snagging disputes with new homeowners.",
+              "order_index": 2,
+              "is_copyable": true
+            },
+            {
+              "title": "Option D - Safety Guide",
+              "content_markdown": "Write a safety guide for managing incidents during construction and fit-out works on an active development site.",
+              "order_index": 3,
+              "is_copyable": true
+            },
+            {
+              "title": "Option E - SOP",
+              "content_markdown": "Write an SOP for reporting non-conformances found during a tender bid evaluation.",
+              "order_index": 4,
+              "is_copyable": true
+            }
+          ]
+        },
+        {
+          "title": "Rewrite your improved prompt",
+          "instruction_markdown": "Using the prompting framework, rewrite your chosen prompt. Make sure it includes:\n\n- Role - who the AI should act as\n- Context - background information the AI needs\n- Task - the specific output you need\n- Format - how the output should be structured\n- Tone - the voice and style required\n\nShare your improved prompt with the group when ready.",
+          "order_index": 1,
+          "estimated_minutes": 10,
+          "is_required": true,
+          "prompt_blocks": []
+        }
+      ]
+    },
+
+    {
+      "title": "Core Activity 1 - Prompt to Image",
+      "objective": "Use Copilot Create to generate a premium, text-rich magazine advert for Aldar, experiencing how detailed prompts produce dramatically better image outputs.",
+      "order_index": 1,
+      "steps": [
+        {
+          "title": "Open Copilot Create",
+          "instruction_markdown": "Navigate to Copilot Create and open a new image generation session. You'll paste a full creative brief to generate a premium Aldar magazine advert.",
+          "order_index": 0,
+          "estimated_minutes": 2,
+          "is_required": true,
+          "ai_tool_name": "Copilot Create",
+          "ai_tool_url": "https://m365.cloud.microsoft/create",
+          "prompt_blocks": []
+        },
+        {
+          "title": "Generate the Aldar magazine advert",
+          "instruction_markdown": "Copy the full prompt below and paste it into Copilot Create. Submit and review the result. Notice how the structured prompt controls layout, typography, subject, and tone.",
+          "order_index": 1,
+          "estimated_minutes": 10,
+          "is_required": true,
+          "ai_tool_name": "Copilot Create",
+          "ai_tool_url": "https://m365.cloud.microsoft/create",
+          "prompt_blocks": [
+            {
+              "title": "Aldar Magazine Advert Prompt",
+              "content_markdown": "Create a premium, text-rich magazine advert for an Aldar branded residential community in Abu Dhabi.\n\nFORMAT\nPortrait magazine advert, A4 vertical layout, 4:5 aspect ratio. Luxury editorial real estate campaign. Photorealistic hero image blended with clean modern graphic design. The advert must feel like a premium full-page magazine placement, not a social media poster.\n\nPRIMARY VISUAL\nAt the centre-left of the advert, show a dignified Emirati man in his mid-30s standing in a three-quarter pose on a sunlit terrace of a modern waterfront residence in Abu Dhabi. He has a calm, confident gaze, medium-brown skin tone, expressive dark eyes, and a neatly trimmed short beard.\n\nHe wears:\n- A pristine white UAE-style kandura, collarless, no chest pockets\n- A long braided farukhah tassel reaching the waist\n- A spotless white ghutra secured with a black two-loop agal\n- Traditional tan leather naal sandals just visible beneath the kandura hem\n\nSETTING\n- A landscaped waterfront community with low-rise contemporary villas\n- Floor-to-ceiling glass and clean architectural lines\n- Mature palms and native, water-efficient landscaping\n- A pedestrian-friendly promenade with cycling track in the distance\n- Warm late-afternoon natural light\n- Subtle community amenities: a mosque minaret, a community centre, a children's play area softly out of focus\n- Background figures softly out of focus: an Emirati woman in a black abaya walking with a child, a Filipino landscaping worker tending greenery, and a South Asian facilities attendant near a smart access gate\n\nLAYOUT\nUse a premium magazine layout with strong negative space on the right-hand side for text. The left side carries the cinematic community portrait. The right side carries the advert copy in clean, highly readable typography. Use elegant white, deep navy, soft sand, warm gold, and subtle silver accents.\n\nEXACT ADVERT COPY TO INCLUDE\n\nTop right: Aldar\n\nEyebrow: A COMMUNITY DESIGNED AROUND YOU\n\nHeadline:\nLive well.\nBelong here.\nMove in with confidence.\n\nSubheadline: An Aldar masterplanned community designed to make everyday living simpler, greener and more connected across Abu Dhabi.\n\nBenefit block 1 - Homes built to last: Quality design and construction, handed over to a standard you can trust.\n\nBenefit block 2 - Amenities at your doorstep: Schools, retail, parks, mosques and healthcare within a short walk.\n\nBenefit block 3 - Manage your home digitally: Track service requests, payments and community updates through the Aldar app.\n\nBenefit block 4 - A community that cares: Sustainable landscaping, worker welfare standards, and active community spaces.\n\nApp strip: Aldar Living App - Your home. Your community. Your service requests. All in one place.\n\nCTA: Ask about Aldar communities today.\n\nDisclaimer: Availability, pricing, payment plans, handover timelines and amenities depend on the selected project, unit, contract terms and applicable UAE regulations.\n\nVISUAL EFFECT\nCinematic lighting, ultra-crisp detail, editorial photography, realistic skin texture, realistic fabric texture, realistic architectural reflections. Depth of field: f/1.8. ISO 100. Warm natural light balanced with soft architectural lighting. No cartoon style. No unrealistic architecture. No exaggerated smiles. No clutter.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Core Activity 2 - Build a General Prompt Coach Agent",
+      "objective": "Create and configure a reusable Microsoft Copilot agent that guides colleagues through iterative prompt improvement.",
+      "order_index": 2,
+      "steps": [
+        {
+          "title": "Create the agent in Copilot",
+          "instruction_markdown": "1. Open Microsoft Copilot and click Create Agent in the left menu\n2. Click Configure\n3. Set the Name and Description to: `General Prompt Coach`\n4. Paste the system prompt below into the Instructions field\n5. Click Create to save\n6. Share the link with a colleague to test it",
+          "order_index": 0,
+          "estimated_minutes": 10,
+          "is_required": true,
+          "prompt_blocks": [
+            {
+              "title": "General Prompt Coach - System Instructions",
+              "content_markdown": "I want you to become my Expert Prompt engineer with over 5 years of working at the cutting edge of Generative AI. Your goal is to help me craft the best possible prompt for my needs. The prompt will be used by you, ChatGPT. You will follow the following process:\n\n1. Your first response will be to ask me what the prompt should be about. I will provide my answer, but we will need to improve it through continual iterations by going through the next steps.\n\n2. Based on my input, you will generate 2 sections:\n   - a) Revised prompt - provide your rewritten prompt; it should be clear, concise, and easily understood by you.\n   - b) Questions - ask any relevant questions pertaining to what additional information is needed from me to improve the prompt.\n\n3. We will continue this iterative process with me providing additional information to you and you updating the prompt in the Revised prompt section until I say we are done.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Core Activity 3 - Agent Builder (Prompt Coach for Agents)",
+      "objective": "Build a more advanced Copilot agent that collaboratively designs other agents - learning how to structure agent names, descriptions, and system instructions.",
+      "order_index": 3,
+      "steps": [
+        {
+          "title": "Create the Prompt Coach for Agents",
+          "instruction_markdown": "1. Open Microsoft Copilot → Create Agent → Configure\n2. Set the Name and Description to: `Prompt Coach for Agents`\n3. Paste the system prompt below into the Instructions field\n4. Click Create and share with your team",
+          "order_index": 0,
+          "estimated_minutes": 10,
+          "is_required": true,
+          "prompt_blocks": [
+            {
+              "title": "Prompt Coach for Agents - System Instructions",
+              "content_markdown": "You are my Agent Builder, a creative and strategic guide with over 5 years of experience in designing conversational and task-based AI agents.\n\nYour goal is to help me build an effective new agent by collaboratively crafting its name, description, and system instructions through structured conversation and refinement.\n\nYou will follow this process:\n\nInitial Inquiry\nYour first message will ask me what kind of agent I want to build or what problem it should solve. Encourage me to describe the agent's purpose, audience, and personality in my own words.\n\nFirst Draft Generation\nBased on my input, generate three sections:\n- a) Agent Name - A short, memorable, and context-appropriate name (give 2–3 creative options)\n- b) Agent Description - A 2–3 sentence summary describing what the agent does, for whom, and why it's useful\n- c) Draft Instructions - A first version of the system prompt or core behavioural guidelines for how the agent should act, speak, and think\n\nIterative Refinement\nEnd each response with a Questions section - ask 2–4 targeted questions to help refine the agent's purpose, tone, or constraints. With each iteration, refine the Name, Description, and Instructions based on my feedback until I confirm we are done.\n\nFinal Output\nWhen I say we're done, present a clean final summary:\n- Final Name\n- Description\n- Final System Instructions (clear, well-structured, and ready to use)\n\nYour style should be collaborative, creative, and practical - striking a balance between imaginative ideation and professional clarity.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Core Activity 4 - Researcher Agent",
+      "objective": "Use Copilot's Researcher Agent to generate a boardroom-ready one-page strategic brief on AI Agent adoption for Aldar's executive leadership team.",
+      "order_index": 4,
+      "steps": [
+        {
+          "title": "Run the Researcher Agent prompt",
+          "instruction_markdown": "1. Open Microsoft Copilot and start a new chat with the Researcher Agent\n2. Copy and paste the full strategic brief prompt below\n3. Review the output - does it meet the format of a one-page executive brief?\n4. Iterate by asking Copilot to sharpen specific sections",
+          "order_index": 0,
+          "estimated_minutes": 15,
+          "is_required": true,
+          "prompt_blocks": [
+            {
+              "title": "Aldar AI Agent Strategy Brief Prompt",
+              "content_markdown": "You are a strategy consultant with 20 years of experience specialising in real estate development, master planning, asset management, and AI-driven customer and stakeholder engagement. Help the Aldar Group Strategy, Development, and Investment teams build a strategic plan for adopting AI Agents.\n\nThe primary goal is to empower Development, Tendering, Strategic Sourcing, Supply Chain, Project Scheduling, Design, Customer and Community teams to act as proactive, insight-driven strategic partners who accelerate project delivery, improve customer and community value creation, and strengthen engagement across homebuyers, tenants, contractors, government entities, and internal stakeholders.\n\nFocus this plan specifically on leveraging AI Agents to:\n- Enhance market, land, and competitive intelligence for faster development and investment decisions\n- Streamline the creation and localisation of tender documents, proposals, and stakeholder-facing content\n- Improve insight generation from sales data, handover and snagging data, asset performance, supplier and worker-welfare compliance, and customer feedback\n- Support more personalised, compliant, and data-driven engagement at scale across homebuyers, tenants, and community segments\n\nInclude:\n- Core Objective: Achieving measurable uplift in project delivery, procurement effectiveness, and customer experience through accelerated insight cycles, improved tender and proposal efficiency, and higher engagement quality.\n- 3 Key Milestones: Focusing on initial deployment, cross-business-unit standardisation, and measurable commercial impact (reduced tender turnaround time, faster handover, improved sales conversion, higher customer satisfaction, better portfolio steering, stronger supplier compliance).\n- 5 Leverage Points: Real-time market and competitor scanning, tender and bid intelligence, supply chain and worker-welfare compliance monitoring, project scheduling and risk analysis, sales and customer-content automation, handover and snagging trend analysis, and digital knowledge asset management.\n- Potential Risks: Regulatory and compliance governance, procurement integrity and fairness, data privacy, accuracy in cost and scheduling outputs, accountability in tendering decisions, bias in supplier evaluation, and potential over-automation affecting expert judgement and customer trust.\n\nFormat it as a one-page strategic brief I can pitch to the Executive Leadership Team.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Additional Activity 5 - AI Image Gen (Funko Style)",
+      "objective": "Experience personalised AI image generation by creating a Funko-style action figure of yourself using Copilot.",
+      "order_index": 5,
+      "steps": [
+        {
+          "title": "Create your Funko action figure",
+          "instruction_markdown": "1. Open Microsoft Copilot\n2. Attach a photo of yourself to the chat\n3. Paste the prompt below and submit\n4. Review the result - share with the group!",
+          "order_index": 0,
+          "estimated_minutes": 10,
+          "is_required": false,
+          "prompt_blocks": [
+            {
+              "title": "Funko Figure Prompt",
+              "content_markdown": "Create an image of me as a Funko style action figure (please make sure it looks like a toy). Be as specific as possible based on what you know about me. And put multiple interesting things that represent who I am inside the packaging. I've attached an image of me for reference.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Additional Activity 6 - Copilot in Word",
+      "objective": "Generate a complete, structured business document from scratch using Copilot in Microsoft Word, grounded in real source material.",
+      "order_index": 6,
+      "steps": [
+        {
+          "title": "Set up your Word document",
+          "instruction_markdown": "1. Open a blank Microsoft Word document saved to OneDrive or SharePoint\n2. Open the Copilot pane (Home → Copilot, or Alt+I)\n3. Make sure you are in Edit with Copilot mode",
+          "order_index": 0,
+          "estimated_minutes": 3,
+          "is_required": true,
+          "ai_tool_name": "Microsoft Word",
+          "ai_tool_url": "https://www.office.com/launch/word",
+          "prompt_blocks": []
+        },
+        {
+          "title": "Generate the document from a single prompt",
+          "instruction_markdown": "Paste the prompt below into the Copilot pane and watch it build the document structure section by section. Then:\n\n- Use Reference a file to attach up to 3 supporting inputs\n- Ask Copilot to add a table of contents, executive summary, and a data table\n- Use the Inspire Me button to continue one section in your tone\n- Try switching models in the model picker (Anthropic vs. OpenAI) on one section to compare voice",
+          "order_index": 1,
+          "estimated_minutes": 20,
+          "is_required": true,
+          "ai_tool_name": "Microsoft Word",
+          "ai_tool_url": "https://www.office.com/launch/word",
+          "prompt_blocks": [
+            {
+              "title": "Copilot in Word - Example Prompt",
+              "content_markdown": "Draft a 6-page internal briefing for the projects tender committee on rising material and labour cost exposure in Abu Dhabi residential construction. Audience: senior tendering and strategic sourcing leads and the Chief Procurement Officer. The document should help the committee decide whether to introduce a standard cost-escalation clause in 2026 contractor tenders. Include an executive summary, a section on observed cost movements over the past three years, a comparison of three approaches (fixed price, indexed escalation, shared-risk mechanism), regulatory and ICV considerations in the UAE, and a recommendation with rationale. Tone: precise, technically literate, decision-oriented.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Additional Activity 7 - Copilot in Excel",
+      "objective": "Generate a complete analytical workbook from scratch using Copilot in Excel - including sample data, pivot tables, charts, complex formulas, and an executive summary.",
+      "order_index": 7,
+      "steps": [
+        {
+          "title": "Set up your Excel workbook",
+          "instruction_markdown": "1. Open a blank Microsoft Excel workbook saved to OneDrive, SharePoint, or locally\n2. Open the Copilot pane in Edit with Copilot mode",
+          "order_index": 0,
+          "estimated_minutes": 3,
+          "is_required": true,
+          "ai_tool_name": "Microsoft Excel",
+          "ai_tool_url": "https://www.office.com/launch/excel",
+          "prompt_blocks": []
+        },
+        {
+          "title": "Generate dataset, dashboard, and summary",
+          "instruction_markdown": "Paste the prompt below to generate the full dataset. Then:\n\n- Ask Copilot to build pivot tables and charts summarising data by community, unit type, handover quarter, and contractor\n- Use Formula AI to generate a complex formula by describing the calculation in plain language\n- Use the new `=COPILOT()` cell function to classify snagging notes (structural / MEP / finishing)\n- Generate a 3-bullet executive summary on a separate sheet\n- Switch models in the model picker for one analytical prompt to compare output quality",
+          "order_index": 1,
+          "estimated_minutes": 20,
+          "is_required": true,
+          "ai_tool_name": "Microsoft Excel",
+          "ai_tool_url": "https://www.office.com/launch/excel",
+          "prompt_blocks": [
+            {
+              "title": "Copilot in Excel - Example Prompt",
+              "content_markdown": "Generate a 500-row sample dataset for an Abu Dhabi residential handover programme covering 2022–2025. Columns: unit ID, community (Yas Island, Saadiyat Island, Reem Island, Al Raha Beach, Alreeman), unit type (apartment, townhouse, villa), contractor, planned handover date, actual handover date, snagging item count, and a 'major defect' flag.\n\nEmbed realistic patterns: a baseline of low snagging counts with a clear spike on two communities handed over in 2024, plus seasonal handover peaks in Q4.\n\nThen build a one-page dashboard for a handover operations manager: snagging items by community and year, top five contractors by delay days, and a chart showing on-time vs. delayed handovers over time. Write a three-bullet executive summary on a separate sheet.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "title": "Additional Activity 8 - Copilot in PowerPoint",
+      "objective": "Generate two presentations using different approaches - prompt-led and source-document-led - then compare which method produced the stronger first draft.",
+      "order_index": 8,
+      "steps": [
+        {
+          "title": "Part A - Generate from a prompt",
+          "instruction_markdown": "1. Open a blank PowerPoint deck and open the Copilot pane\n2. Use the Narrative Builder to set length, tone, slide style, and whether AI images should be included\n3. Paste the prompt below and generate the full deck\n4. Ask Copilot to:\n   - Add AI-generated images for the title slide and concept slides\n   - Write speaker notes for every slide in executive tone\n   - Apply transitions and animations for a polished business audience\n   - Pull approved assets from your organisation's SharePoint brand kit (if configured)",
+          "order_index": 0,
+          "estimated_minutes": 20,
+          "is_required": true,
+          "ai_tool_name": "Microsoft PowerPoint",
+          "ai_tool_url": "https://www.office.com/launch/powerpoint",
+          "prompt_blocks": [
+            {
+              "title": "Part A - Example Prompt",
+              "content_markdown": "Generate a 14-slide partner-facing presentation for a strategic sourcing review with a major main contractor. Audience: their commercial director and project lead. Objective: secure their commitment to Aldar's enhanced worker-welfare and sustainable procurement standards on an upcoming community build.\n\nStructure: cover slide, agenda, market context (Abu Dhabi construction pipeline and ICV expectations), 2024–2025 delivery and compliance experience and what changed, our updated view of supply chain risk, proposed partnership framework with two alternatives, capacity and assurance, value-added support (training, expedited payments, recognition), commercial summary, next steps.\n\nTone: confident, technically credible, partnership-oriented. Use our corporate template, include AI-generated images only on the cover and section dividers, and write executive-tone speaker notes for each slide.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        },
+        {
+          "title": "Part B - Generate from source documents",
+          "instruction_markdown": "1. Open a new blank PowerPoint deck\n2. In Copilot, use Add Content to attach up to 5 source files (Word briefing, PDF report, Excel workbook, or a web URL)\n3. Paste the prompt below to generate a presentation grounded in your source material\n4. When both decks are done, compare them: which produced a stronger first draft? What does that tell you about when to lead with a prompt vs. source material?",
+          "order_index": 1,
+          "estimated_minutes": 15,
+          "is_required": true,
+          "ai_tool_name": "Microsoft PowerPoint",
+          "ai_tool_url": "https://www.office.com/launch/powerpoint",
+          "prompt_blocks": [
+            {
+              "title": "Part B - Example Prompt",
+              "content_markdown": "Generate a 10-slide executive briefing for the Aldar Group Board from the attached Word document (sustainability and worker-welfare strategy) and Excel workbook (supplier compliance and emissions by package and project).\n\nAudience: Board members, mixed technical literacy. Objective: help them decide whether to commit to a tightened supplier compliance threshold for all tenders above AED 500k by 2027.\n\nPull the compliance charts directly from the workbook. Include a balanced view of the strategic, reputational, and delivery implications, and end with a clear recommendation slide and a decision-required slide. Tone: board-level, concise, no jargon.",
+              "order_index": 0,
+              "is_copyable": true
+            }
+          ]
+        }
+      ]
+    }
+
+  ]
+}

@@ -166,6 +166,7 @@ export interface ModuleStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field: boolean;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
   created_at: string;
@@ -179,6 +180,7 @@ export interface ModuleStepInsert {
   order_index: number;
   estimated_minutes?: number | null;
   is_required?: boolean;
+  show_response_field?: boolean;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
 }
@@ -292,6 +294,7 @@ export interface SessionSnapshotStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field: boolean;
   ai_tool_name: string;
   ai_tool_url: string;
   created_at: string;

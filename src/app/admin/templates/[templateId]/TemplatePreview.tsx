@@ -32,6 +32,7 @@ interface Step {
   instruction_markdown: string;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field?: boolean;
   order_index: number;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
@@ -384,7 +385,7 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
             )}
 
             {/* Submission placeholder (for required steps or last step) */}
-            {(currentStep.is_required || isLastStep) && (
+            {(currentStep.show_response_field !== false) && (currentStep.is_required || isLastStep) && (
               <Card className="shadow-sm">
                 <CardContent className="p-6">
                   <h3 className="font-medium text-gray-900 mb-3">

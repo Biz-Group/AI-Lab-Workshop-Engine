@@ -9,6 +9,7 @@ const updateStepSchema = z.object({
   instruction_markdown: z.string().optional(),
   estimated_minutes: z.number().int().min(1).max(120).nullable().optional(),
   is_required: z.boolean().optional(),
+  show_response_field: z.boolean().optional(),
   order_index: z.number().int().min(0).optional(),
   ai_tool_name: z.string().max(100).nullable().optional(),
   ai_tool_url: z.string().url().max(2000).nullable().optional(),

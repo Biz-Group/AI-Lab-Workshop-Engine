@@ -60,6 +60,7 @@ interface Step {
   instruction_markdown: string;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field: boolean;
   order_index: number;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
@@ -215,12 +216,12 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     }));
   }, []);
 
-  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => {
+  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; show_response_field?: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => {
     setTemplate(prev => ({
       ...prev,
       modules: prev.modules.map(m =>
         m.id === moduleId
-          ? { ...m, steps: [...m.steps, { ...newStep, prompt_blocks: newStep.prompt_blocks ?? [] }] }
+          ? { ...m, steps: [...m.steps, { ...newStep, show_response_field: newStep.show_response_field ?? true, prompt_blocks: newStep.prompt_blocks ?? [] }] }
           : m
       ),
     }));
@@ -1217,6 +1218,7 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
     instruction_markdown: step.instruction_markdown || '',
     estimated_minutes: step.estimated_minutes,
     is_required: step.is_required,
+    show_response_field: step.show_response_field ?? true,
     ai_tool_name: step.ai_tool_name || '',
     ai_tool_url: step.ai_tool_url || '',
   });
@@ -1377,6 +1379,7 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
                 instruction_markdown: step.instruction_markdown || '',
                 estimated_minutes: step.estimated_minutes,
                 is_required: step.is_required,
+                show_response_field: step.show_response_field ?? true,
                 ai_tool_name: step.ai_tool_name || '',
                 ai_tool_url: step.ai_tool_url || '',
               });
@@ -1474,14 +1477,24 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
             }
             min={1}
           />
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={editForm.is_required}
-              onChange={(e) => setEditForm(prev => ({ ...prev, is_required: e.target.checked }))}
-            />
-            Required step
-          </label>
+          <div className="flex flex-col gap-2">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={editForm.is_required}
+                onChange={(e) => setEditForm(prev => ({ ...prev, is_required: e.target.checked }))}
+              />
+              Required step
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={editForm.show_response_field}
+                onChange={(e) => setEditForm(prev => ({ ...prev, show_response_field: e.target.checked }))}
+              />
+              Show response section
+            </label>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="AI Tool Button Label (optional)"

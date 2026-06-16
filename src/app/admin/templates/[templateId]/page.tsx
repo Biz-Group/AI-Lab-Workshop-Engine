@@ -25,6 +25,7 @@ interface TemplateStepRow {
   order_index: number;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
+  show_response_field: boolean;
   prompt_blocks?: TemplatePromptBlockRow[] | null;
 }
 
@@ -75,6 +76,7 @@ export default async function TemplateDetailPage({ params }: PageProps) {
           order_index,
           ai_tool_name,
           ai_tool_url,
+          show_response_field,
           prompt_blocks(
             id,
             title,
