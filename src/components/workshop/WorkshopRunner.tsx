@@ -660,7 +660,7 @@ export function WorkshopRunner({
             </Button>
 
             {/* Submission Area */}
-            {currentStep.show_response_field && (currentStep.is_required || isLastStep) && (
+            {(currentStep.show_response_field !== false) && (currentStep.is_required || isLastStep) && (
               <Card>
                 <CardContent className="p-6 space-y-4">
                   <h3 className="font-medium text-gray-900">

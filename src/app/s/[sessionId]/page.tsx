@@ -88,6 +88,7 @@ export default async function SessionPage({ params }: PageProps) {
           order_index,
           estimated_minutes,
           is_required,
+          show_response_field,
           ai_tool_name,
           ai_tool_url,
           prompt_blocks:session_snapshot_prompt_blocks(

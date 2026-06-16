@@ -964,7 +964,7 @@ export function PresenterView({
                       id, title, objective, order_index,
                       steps:session_snapshot_steps(
                         id, title, instruction_markdown, order_index,
-                        estimated_minutes, is_required, ai_tool_name, ai_tool_url,
+                        estimated_minutes, is_required, show_response_field, ai_tool_name, ai_tool_url,
                         prompt_blocks:session_snapshot_prompt_blocks(
                           id, title, content_markdown, is_copyable, order_index
                         )
