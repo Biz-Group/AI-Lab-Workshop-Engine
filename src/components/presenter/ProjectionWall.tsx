@@ -733,7 +733,7 @@ export function ProjectionWall({
       {/* Spotlight */}
       {spotlightImage && (
         <div
-          className="wall-spotlight-enter absolute inset-0 z-50 flex flex-col bg-[#0B1020]/98"
+          className="wall-spotlight-enter absolute inset-0 z-50 flex flex-col bg-[#0B1020FA]"
           onClick={() => setSpotlightId(null)}
         >
           <div className="flex min-h-0 flex-1 items-center justify-center p-10">
@@ -741,7 +741,7 @@ export function ProjectionWall({
             <img
               src={spotlightImage.display_image_url}
               alt={showNames ? `Submission by ${spotlightImage.participant_name}` : 'Submission'}
-              className="max-h-full max-w-full object-contain"
+              className="max-h-full max-w-full rounded-lg border border-white/15 object-contain shadow-2xl"
             />
           </div>
           <div
@@ -779,7 +779,7 @@ export function ProjectionWall({
       {/* Reference/target image, enlarged */}
       {isReferenceImageOpen && currentStep?.referenceImageUrl && (
         <div
-          className="wall-spotlight-enter absolute inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#0B1020]/98 p-10"
+          className="wall-spotlight-enter absolute inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#0B1020FA] p-10"
           onClick={() => setIsReferenceImageOpen(false)}
         >
           <span className="text-sm uppercase tracking-[0.22em] text-white/40">Target image</span>

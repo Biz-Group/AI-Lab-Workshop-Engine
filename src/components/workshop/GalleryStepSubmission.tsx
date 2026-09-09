@@ -355,6 +355,7 @@ export function GalleryStepSubmission({
                       ? 'border-brand-400 bg-brand-50'
                       : 'border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/60'
                   )}
+                  onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => {
                     e.preventDefault();
                     setIsDraggingOver(true);
