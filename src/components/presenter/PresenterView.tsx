@@ -30,6 +30,7 @@ import { Button, Timer, Card, CardContent, ProgressBar } from '@/components/ui';
 import { ParticipantList } from './ParticipantList';
 import { PresenterQAPanel, type PresenterQuestion } from './PresenterQAPanel';
 import { createClient } from '@/lib/supabase';
+import { authFetch } from '@/lib/utils/auth-fetch';
 import { formatJoinCodeForDisplay, cn } from '@/lib/utils';
 import {
   deriveBroadcastStatus,
@@ -345,6 +346,19 @@ export function PresenterView({
     }
   }, []);
 
+  // Like the projection wall, this console is meant to stay open for an
+  // entire session -- Supabase's own token refresh timer gets throttled on
+  // an idle/backgrounded tab, so nudge it proactively rather than relying on
+  // authFetch's retry-on-401 to always catch it in time.
+  useEffect(() => {
+    const supabase = createClient();
+    const interval = setInterval(() => {
+      void supabase.auth.refreshSession();
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Map snake_case API keys to camelCase state keys
   const mapApiToState = (updates: Record<string, unknown>): Record<string, unknown> => {
     const keyMap: Record<string, string> = {
@@ -365,7 +379,7 @@ export function PresenterView({
   const updateSession = async (updates: Record<string, unknown>) => {
     setIsUpdating(true);
     try {
-      const response = await fetch(`/api/admin/sessions/${session.id}`, {
+      const response = await authFetch(`/api/admin/sessions/${session.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
@@ -594,7 +608,7 @@ export function PresenterView({
     if (!text) return false;
 
     try {
-      const res = await fetch(`/api/questions/${questionId}`, {
+      const res = await authFetch(`/api/questions/${questionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answerText: text }),
@@ -612,7 +626,7 @@ export function PresenterView({
   // Delete a question
   const deleteQuestion = useCallback(async (questionId: string): Promise<void> => {
     try {
-      const res = await fetch(`/api/questions/${questionId}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/questions/${questionId}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
     } catch {

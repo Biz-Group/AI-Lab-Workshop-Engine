@@ -39,6 +39,7 @@ import {
   type SessionSubmissionImage,
 } from '@/lib/hooks/useSessionSubmissions';
 import { useFullscreen } from '@/lib/hooks/useFullscreen';
+import { authFetch } from '@/lib/utils/auth-fetch';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ─── Layout ─────────────────────────────────────────────────────────────────
@@ -126,6 +127,8 @@ interface ProjectionWallProps {
 
 const STEP_RECONCILE_INTERVAL_MS = 10_000;
 const CONTROLS_IDLE_MS = 4_000;
+/** Comfortably under Supabase's default ~1h access-token expiry. */
+const AUTH_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 export function ProjectionWall({
   session,
@@ -200,7 +203,7 @@ export function ProjectionWall({
       setIsReferenceImageOpen(false);
 
       try {
-        const res = await fetch(`/api/admin/sessions/${session.id}`, {
+        const res = await authFetch(`/api/admin/sessions/${session.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ current_step_id: target.id }),
@@ -226,6 +229,21 @@ export function ProjectionWall({
     },
     [gallerySteps, currentStepId, session.id]
   );
+
+  // ─── Auth keep-alive ──────────────────────────────────────────────────────
+  //
+  // Belt-and-suspenders alongside authFetch's retry-on-401: proactively nudge
+  // the token before it goes stale, so a backgrounded/throttled tab is less
+  // likely to ever need the reactive retry in the first place.
+
+  useEffect(() => {
+    const supabase = createClient();
+    const interval = setInterval(() => {
+      void supabase.auth.refreshSession();
+    }, AUTH_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // ─── Presenter <-> wall sync ──────────────────────────────────────────────
 
@@ -315,7 +333,7 @@ export function ProjectionWall({
     async (submissionId: string) => {
       setPendingHideId(submissionId);
       try {
-        const res = await fetch(`/api/admin/submissions/${submissionId}`, {
+        const res = await authFetch(`/api/admin/submissions/${submissionId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hidden_from_wall: true }),
@@ -881,12 +899,15 @@ function WallTile({
       )}
       style={animationDelayMs ? { animationDelay: `${animationDelayMs}ms` } : undefined}
     >
-      {/* cover, so the grid reads as a clean wall rather than a ragged one.
-          Spotlight is where the full image gets seen. */}
+      {/* contain, not cover: the whole submission is visible directly on the
+          wall, matching the spotlight below. Letterboxed margins are filled by
+          the tile's own translucent background (.wall-tile in globals.css) and
+          clipped to its rounded corners, so a mismatched-aspect image still
+          reads as a clean card, not a hole in the grid. */}
       <img
         src={image.display_image_url}
         alt={showNames ? `Submission by ${image.participant_name}` : 'Submission'}
-        className="min-h-0 w-full flex-1 object-cover"
+        className="min-h-0 w-full flex-1 object-contain"
       />
       {hasFooter && (
         <div className="w-full shrink-0 bg-black/45 px-3 py-2 text-left">
