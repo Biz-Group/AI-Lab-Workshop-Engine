@@ -22,6 +22,7 @@ import {
   Minus,
   Plus,
   ImageIcon,
+  MonitorPlay,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -30,6 +31,15 @@ import { ParticipantList } from './ParticipantList';
 import { PresenterQAPanel, type PresenterQuestion } from './PresenterQAPanel';
 import { createClient } from '@/lib/supabase';
 import { formatJoinCodeForDisplay, cn } from '@/lib/utils';
+import {
+  deriveBroadcastStatus,
+  mapRealtimeChannelStatus,
+  readStepChangePayload,
+  workshopBroadcastChannel,
+  STEP_CHANGE_EVENT,
+  TIMER_UPDATE_EVENT,
+  type ChannelConnectionStatus,
+} from '@/lib/utils/realtime';
 import {
   buildSessionParticipationCsv,
   buildSessionParticipationRows,
@@ -65,8 +75,6 @@ interface PresenterViewProps {
   initialParticipantCount: number;
 }
 
-type ChannelConnectionStatus = 'connecting' | 'connected' | 'error';
-
 interface PreviewPromptBlock {
   id: string;
   title: string;
@@ -93,23 +101,6 @@ interface PreviewModule {
   objective: string | null;
   order_index: number;
   steps: PreviewStep[];
-}
-
-function mapRealtimeChannelStatus(status: string): ChannelConnectionStatus {
-  if (status === 'SUBSCRIBED') return 'connected';
-  if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-    return 'error';
-  }
-  return 'connecting';
-}
-
-function deriveBroadcastStatus(
-  presenterStatus: ChannelConnectionStatus,
-  broadcastStatus: ChannelConnectionStatus
-): ChannelConnectionStatus {
-  if (presenterStatus === 'error' || broadcastStatus === 'error') return 'error';
-  if (presenterStatus === 'connected' && broadcastStatus === 'connected') return 'connected';
-  return 'connecting';
 }
 
 const LazyQrCodeModal = dynamic(
@@ -396,8 +387,16 @@ export function PresenterView({
 
   // Navigation handlers
   const goToStep = async (stepId: string) => {
-    await updateSession({ current_step_id: stepId });
+    const success = await updateSession({ current_step_id: stepId });
     setCompletedCount(0);
+    if (success) {
+      // Keep the projected gallery wall in step with the console.
+      broadcastChannelRef.current?.send({
+        type: 'broadcast',
+        event: STEP_CHANGE_EVENT,
+        payload: { current_step_id: stepId },
+      });
+    }
   };
 
   const nextStep = () => {
@@ -437,7 +436,7 @@ export function PresenterView({
     if (success) {
       broadcastChannelRef.current?.send({
         type: 'broadcast',
-        event: 'timer_update',
+        event: TIMER_UPDATE_EVENT,
         payload: { timer_end_at: endAt },
       });
     }
@@ -448,7 +447,7 @@ export function PresenterView({
     if (success) {
       broadcastChannelRef.current?.send({
         type: 'broadcast',
-        event: 'timer_update',
+        event: TIMER_UPDATE_EVENT,
         payload: { timer_end_at: null },
       });
     }
@@ -551,7 +550,24 @@ export function PresenterView({
       }
     });
 
-    const bcastChannel = supabase.channel(`workshop-broadcast:${initialSession.id}`);
+    // The projected gallery wall can also drive the step pointer. Nothing
+    // listens to the `sessions` table anywhere in the app, so without this the
+    // console would silently show a stale step for the rest of the session.
+    const bcastChannel = supabase
+      .channel(workshopBroadcastChannel(initialSession.id))
+      .on('broadcast', { event: STEP_CHANGE_EVENT }, ({ payload }) => {
+        if (!mounted) return;
+        const parsed = readStepChangePayload(payload);
+        if (!parsed) return;
+
+        setSession((prev) =>
+          prev.currentStepId === parsed.current_step_id
+            ? prev
+            : { ...prev, currentStepId: parsed.current_step_id }
+        );
+        setCompletedCount(0);
+      });
+
     bcastChannel.subscribe((status) => {
       if (!mounted) return;
       setChannelStatuses((previous) => ({
@@ -964,7 +980,7 @@ export function PresenterView({
                       id, title, objective, order_index,
                       steps:session_snapshot_steps(
                         id, title, instruction_markdown, order_index,
-                        estimated_minutes, is_required, show_response_field, ai_tool_name, ai_tool_url,
+                        estimated_minutes, is_required, show_response_field, is_gallery_step, ai_tool_name, ai_tool_url,
                         prompt_blocks:session_snapshot_prompt_blocks(
                           id, title, content_markdown, is_copyable, order_index
                         )
@@ -1016,6 +1032,17 @@ export function PresenterView({
             >
               <ImageIcon className="w-4 h-4 mr-2" />
               Submission Gallery
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => {
+                window.open(`/session/${session.id}/present`, '_blank');
+              }}
+            >
+              <MonitorPlay className="w-4 h-4 mr-2" />
+              Project Gallery Wall
             </Button>
           </div>
 

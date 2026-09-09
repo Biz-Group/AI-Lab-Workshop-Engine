@@ -144,4 +144,27 @@ test.describe('core browser flows', () => {
     await expect(page.getByText('Password must be at least 8 characters')).toBeVisible();
     expect(consoleErrors).toEqual([]);
   });
+
+  // Guards the proxy change that widened the facilitator gate to cover
+  // /session/*. The route name '/present' does not contain '/presenter', so the
+  // old substring test would have left the projected wall unguarded.
+  test('projected gallery wall requires facilitator authentication', async ({ page }) => {
+    await page.goto('/session/11111111-1111-1111-1111-111111111111/present');
+
+    await expect(page).toHaveURL(/\/auth\/login\?redirect=/, { timeout: 15_000 });
+    await expect(page.getByLabel('Email Address')).toBeVisible();
+  });
+
+  test('participant status polling is not caught by the facilitator gate', async ({ page }) => {
+    // The proxy matcher does not exclude /api/sessions/state, so widening the
+    // gate to includes('/session') would redirect this to the login page and
+    // silently break every participant's live status and timer updates.
+    const response = await page.request.get(
+      '/api/sessions/state?sessionId=11111111-1111-1111-1111-111111111111'
+    );
+
+    expect(response.status()).not.toBe(307);
+    expect(response.status()).not.toBe(302);
+    expect(response.headers()['content-type']).toContain('application/json');
+  });
 });

@@ -1,8 +1,8 @@
 # AI Workshop Runner — Project Scope Document
 
 **Project Name:** AI Workshop Runner  
-**Version:** 2.3.0  
-**Last Updated:** May 21, 2026  
+**Version:** 2.4.0  
+**Last Updated:** September 9, 2026  
 **Status:** Production-Ready (Active Development)
 
 ---
@@ -113,14 +113,14 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 | **QR Codes** | qrcode.react | Join code QR display |
 | **Validation** | Zod | Request body validation in API routes |
 | **Hosting** | Vercel | Edge runtime, serverless functions |
-| **Testing** | Vitest + Testing Library | jsdom environment, 11 test files |
+| **Testing** | Vitest + Testing Library | node environment by default; component tests opt in with a `// @vitest-environment jsdom` docblock. 26 test files, 188 tests. Playwright for e2e (6 tests) |
 | **Notifications** | react-hot-toast | Client-side toast messages |
 
 ### Two Auth Systems
 
 | System | For | Method | Storage | Guard |
 |--------|-----|--------|---------|-------|
-| **Supabase Auth** | Facilitators | Email + password login | `sb-*-auth-token` cookies | Middleware on `/admin/*`, `/session/*/presenter` |
+| **Supabase Auth** | Facilitators | Email + password login | `sb-*-auth-token` cookies | Middleware on `/admin/*`, `/session/*` |
 | **Custom JWT** | Participants | HS256 via `jose` library | `workshop_session_token` httpOnly cookie | `verifySessionToken()` in API routes |
 
 **Important:** Facilitators must have both a Supabase Auth user account AND a `facilitator_users` record linked to an organization. See [FACILITATOR_SETUP.md](FACILITATOR_SETUP.md).
@@ -139,7 +139,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 
 ## 📐 Database Schema
 
-### 22 Migrations (`supabase/migrations/001–022`)
+### 28 Migrations (`supabase/migrations/001–028`)
 
 | # | Name | Purpose |
 |---|------|---------|
@@ -167,8 +167,14 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 | 020 | Leads Unique Constraint | Unique index `(organization_id, email)` on leads; fix `idx_leads_session_id` |
 | 021 | Harden Attendee RLS | Remove broad anon RLS policies; force attendee access through JWT-protected API routes |
 | 022 | Prompt Pack Email Queue | `prompt_pack_emailed_at` on participants; index for delayed-send polling |
+| 023 | Access Requests | `access_requests` table, `is_owner_of_org()` helper |
+| 024 | Shared Rate Limit | `request_rate_limits` table + `consume_rate_limit()` RPC |
+| 025 | Security Definer Hardening | Lock down search_path on helper functions |
+| 026 | Fix Snapshot Nullable Refs | Make snapshot `original_*_id` columns nullable (ON DELETE SET NULL) |
+| 027 | Step Response Toggle | `show_response_field` on module_steps + session_snapshot_steps |
+| 028 | Gallery Steps | `is_gallery_step` on module_steps / session_snapshot_steps / activity_library_steps; `show_response_field` on activity_library_steps; `hidden_from_wall` on submissions; partial wall index; idempotent realtime publication for submissions + participants |
 
-### Tables (22 total)
+### Tables (25 total)
 
 **Organization & Users:**
 - `organizations` — name, industry, tone_notes, example_use_cases[], logo_url
@@ -183,13 +189,13 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 
 **Activity Library (reusable org-wide content):**
 - `activity_library` — organization_id, title, objective, source_module_id
-- `activity_library_steps` — activity_id, title, instruction_markdown, order_index, estimated_minutes, is_required, ai_tool_name, ai_tool_url
+- `activity_library_steps` — activity_id, title, instruction_markdown, order_index, estimated_minutes, is_required, show_response_field, is_gallery_step, ai_tool_name, ai_tool_url
 - `activity_library_prompt_blocks` — library_step_id, title, content_markdown, order_index, is_copyable
 
 **Session Snapshots (frozen copies at session creation):**
 - `sessions` — organization_id, template_id, facilitator_id, join_code, status, current_step_id, timer_end_at, scheduled_at, started_at, ended_at, client_name, department, location, poc_name, poc_email, event_type (keynote/halfday/fullday), event_date, ai_tool_name, ai_tool_url
 - `session_snapshot_modules` — session_id, original_module_id, title, objective, order_index
-- `session_snapshot_steps` — session_id, snapshot_module_id, original_step_id, title, instruction_markdown, instruction_markdown_raw, order_index, estimated_minutes, is_required, ai_tool_name, ai_tool_url
+- `session_snapshot_steps` — session_id, snapshot_module_id, original_step_id, title, instruction_markdown, instruction_markdown_raw, order_index, estimated_minutes, is_required, show_response_field, is_gallery_step, ai_tool_name, ai_tool_url
 - `session_snapshot_prompt_blocks` — session_id, snapshot_step_id, original_block_id, title, content_markdown, content_markdown_raw, order_index, is_copyable
 
 **Participant Data:**
@@ -222,7 +228,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - **Participant Access:** Code-based joining with custom JWT (no Supabase Auth)
 - **RLS Policies:** Row-level security on all 22 tables
 - **Service Role Bypass:** API routes use `createServiceClient()` for data mutations
-- **Middleware Protection:** Guards `/admin/*` and `/session/*/presenter` via `sb-*-auth-token` cookie detection
+- **Middleware Protection:** Guards `/admin/*` and `/session/*` via `sb-*-auth-token` cookie detection (a `startsWith` test, deliberately not a substring test — the matcher does not exclude `/api/sessions/state`, which participants poll every 5s). Cookie presence only; each page independently verifies facilitator org membership server-side.
 - **Rate Limiting:** In-memory sliding window per endpoint (join: 10/min, submissions: 20/min, analytics: 60/min, feedback: 5/min)
 
 ### 2. Template Management (Full CRUD + Advanced Editor)
@@ -269,6 +275,7 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
   - Q&A queue with answer functionality
   - Facilitator notes per participant
 - **Submission Gallery:** View all participant submissions for current step
+- **Projected Gallery Wall:** Opens `/session/[id]/present` on a second screen — see feature 13
 - **Preview as Attendee:** Full-screen modal preview fetching session snapshot data (modules, steps, prompt blocks) client-side and rendering via `TemplatePreview` overlay — no participant record is created, no JWT needed
 - **Session Control:** End session with participant notification
 - **Connection Status:** Visual Wifi/WifiOff indicator for Realtime connection
@@ -278,6 +285,11 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - **Narrative Step Sections:** Parsed instruction markdown into objective, actions, deliverable, checklist, tips, success signals, reflection, next-up sections
 - **Prompt Blocks:** Interactive collapsible blocks with clipboard copy and expand/collapse toggle
 - **Submissions:** Text content and image upload per step
+- **Gallery Steps:** On a step marked `is_gallery_step`, the view strips to the activity prompt plus an
+  image-first submission surface (drag-drop, file picker, clipboard paste) with an optional caption.
+  Instructions, prompt blocks and the AI-tool button are hidden because the prompt is on the shared
+  screen. Submitting shows a "look at the main screen" confirmation that survives navigating away and
+  back, with an Edit affordance that allows caption-only changes.
 - **Stuck Signal:** Request help button
 - **Q&A:** Ask questions during session
 - **Progress Map:** Visual narrative progress indicator with module chapters
@@ -326,6 +338,38 @@ AI Workshop Runner is a production-ready web platform for facilitating live, int
 - **Session Linking:** Associate sessions with approved clients
 - **Admin UI:** Client management via `/api/admin/clients`
 
+### 13. Gallery Steps & Projected Gallery Wall
+A Mentimeter-style shared screen. Participants generate an image in an AI tool, drop or paste it
+into Workshop Copilot, and it lands on a chrome-free wall the whole room watches.
+
+- **Per-step flag:** `is_gallery_step` on `module_steps`, carried into `session_snapshot_steps`.
+  A single checkbox in the template editor; there is no separate "gallery session" type.
+- **Audience:** big screen only. Participants never read the wall, so no participant API and no
+  RLS changes were needed.
+- **No lockstep:** participants keep free navigation. A regression test asserts that the
+  facilitator's step pointer cannot move a participant.
+- **Reveal on command:** submissions increment a live distinct-participant counter while the
+  images stay hidden ("Your gallery is filling up… 18 / 24 submitted"). After reveal, later
+  arrivals appear automatically — the facilitator never presses Reveal twice.
+- **Layout:** CSS Grid, not the admin gallery's `columns` masonry (column balancing re-flows every
+  existing tile when one arrives, and its overflow spills sideways rather than down). A minimum
+  tile size is the binding rule: rather than shrinking indefinitely, the wall paginates.
+- **Spotlight:** click a tile for a full `object-contain` view. Dismissed with click or Backspace,
+  never Escape — Escape is owned by the Fullscreen API and cannot be intercepted.
+- **Display toggles:** Names (default off) and Captions (default on), independent, display-only.
+- **Moderation:** per-submission "Hide from wall" via `submissions.hidden_from_wall`, persisted so
+  it survives a projector refresh, and reversible from the admin gallery. Not an approval queue —
+  submissions are visible by default.
+- **Step sync:** two-way over `workshop-broadcast:{sessionId}`. That channel already existed but
+  had no listeners, and nothing in the app observes the `sessions` table, so without this the
+  presenter console would show a stale step for the rest of the session.
+- **Errors and status:** rendered inside the wall subtree, because `<Toaster>` is a sibling of
+  `{children}` in the root layout and is therefore invisible while fullscreen.
+
+**Operational constraint:** a gallery step must be marked in the template *before* the session is
+created. Resync deletes `session_snapshot_modules`, which cascades to `submissions`, and is
+refused once a session is live.
+
 ---
 
 ## 📁 Application Structure
@@ -356,10 +400,11 @@ Facilitator (Supabase Auth Protected):
   /admin/sessions/new            → Create new session
   /admin/team                    → Team management (owner-only: approve requests, roles)
   /session/[sessionId]/presenter → Facilitator presenter mode
-  /session/[sessionId]/gallery   → Submission gallery view
+  /session/[sessionId]/gallery   → Submission gallery view (admin-styled review)
+  /session/[sessionId]/present   → Projected gallery wall (big screen, chrome-free)
 ```
 
-### API Routes (37 endpoints)
+### API Routes (38 endpoints)
 
 **Participant Routes** (Custom JWT Auth):
 | Method | Endpoint | Purpose |
@@ -438,6 +483,7 @@ Barrel export via `src/components/ui/index.ts`.
 | `NarrativeProgressMap` | Visual step progress indicator with modules |
 | `StepNarrativeSections` | Renders parsed instruction sections |
 | `ChapterCelebration` | Module completion celebration screen |
+| `GalleryStepSubmission` | Image-first submission for a gallery step: drag-drop / file picker / clipboard paste, large object-contain preview, optional caption, inline state machine, edit with caption-only support |
 
 ### Admin Components (`src/components/admin/`)
 | Component | Purpose |
@@ -450,7 +496,8 @@ Barrel export via `src/components/ui/index.ts`.
 |-----------|---------|
 | `PresenterView` | Facilitator live view with all controls + preview-as-attendee |
 | `ParticipantList` | Participant list with per-participant progress |
-| `SubmissionGallery` | Gallery view of submissions for current step |
+| `SubmissionGallery` | Admin-styled review of all session submissions (images + text); hide/show from wall |
+| `ProjectionWall` | Projected big-screen gallery wall: reveal, responsive grid, pagination, spotlight, Names/Captions toggles, fullscreen |
 
 ### PDF Components (`src/components/pdf/`)
 | Component | Purpose |
@@ -485,6 +532,16 @@ Barrel export via `src/components/ui/index.ts`.
 ### `src/lib/utils/step-instructions.ts`
 - `parseStepInstructions()` — Parse markdown into semantic sections (objective, actions, deliverable, checklist, tips, successSignal, reflection, nextUp)
 
+### `src/lib/utils/realtime.ts`
+- `mapRealtimeChannelStatus()` / `deriveBroadcastStatus()` — Channel state (lifted out of PresenterView)
+- `describeConnection()` — Facilitator-facing wording ("Live" / "Reconnecting…"), never channel jargon
+- `workshopBroadcastChannel()`, `STEP_CHANGE_EVENT`, `readStepChangePayload()` — Presenter ↔ wall step sync
+
+### `src/lib/utils/image-upload.ts` (browser-only, not in the barrel)
+- `prepareImageForUpload()` — Downscales and re-encodes to WebP above ~4MB/2400px, so high-resolution
+  AI images are not rejected by the 5MB upload cap at the end of the submit flow
+- `getImageFromClipboard()` — Extracts a pasted image, returning null for text-only pastes
+
 ### `src/lib/utils/session-analytics.ts`
 - `buildSessionParticipationRows()` — Generate CSV export data with per-participant aggregation
 
@@ -499,6 +556,22 @@ Barrel export via `src/components/ui/index.ts`.
 
 ### `src/lib/utils/library-sync.ts`
 - `syncModuleToLibrary()` — Deep-copy template module to activity library
+
+### `src/lib/hooks/useSessionSubmissions.ts`
+- One fetch + realtime + 5s-reconcile-poll implementation shared by `SubmissionGallery`
+  (`mode: 'refetch'`) and `ProjectionWall` (`mode: 'incremental'`)
+- Exposes `submittedParticipantIds` as a Set, so counters report **people, not rows**
+- Incremental mode handles the three realtime gaps: payloads carry no joined `display_name`
+  (targeted name backfill, not a full refetch), an UPDATE can exit the query predicate and must
+  remove the entry rather than replace it, and a DELETE carries only the primary key
+- The poll is kept in both modes: migrations 003/009 left the `ALTER PUBLICATION` statements
+  commented out, and a channel reports `SUBSCRIBED` even when its table is not published
+
+### `src/lib/hooks/useFullscreen.ts`
+- Derives state only from `document.fullscreenElement` inside `fullscreenchange` +
+  `webkitfullscreenchange`; Escape, F11 and browser UI all exit without calling our handler,
+  so a self-managed boolean goes stale
+- Feature-detects prefixed APIs and reports `isSupported` so the control can be hidden
 
 ### `src/lib/server/prompt-pack.ts`
 - `buildPromptPackData()` — Server-side query + build for prompt pack
@@ -545,7 +618,7 @@ Organization, FacilitatorUser, WorkshopTemplate, Module, ModuleStep, PromptBlock
 - **Service Role Policies:** Explicit full-access for service_role (API backend)
 - **Supabase Auth:** Password login for facilitators
 - **Custom JWT:** HS256 tokens for participants via `jose`
-- **Middleware:** Route guards on `/admin/*` and `/session/*/presenter` via `sb-*-auth-token` cookie detection
+- **Middleware:** Route guards on `/admin/*` and `/session/*` via `sb-*-auth-token` cookie detection
 - **Facilitator Preview Token:** Separate JWT generation for facilitator "Preview as Attendee" feature
 - **Rate Limiting:** Per-endpoint sliding window (in-memory)
 - **Zod Validation:** All API request bodies validated
@@ -667,7 +740,7 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 
 ## 🧪 Testing
 
-### Test Files (11)
+### Test Files (26 files, 188 tests)
 | File | Coverage |
 |------|----------|
 | `tests/utils.test.ts` | Common utility functions |
@@ -681,6 +754,10 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 | `tests/workshop/session-analytics.test.ts` | Analytics aggregation |
 | `tests/workshop/SessionEndClient.test.tsx` | End screen |
 | `tests/workshop/step-instructions.test.ts` | Instruction parsing |
+| `tests/api/gallery-step-flag.test.ts` | `is_gallery_step` / `show_response_field` persistence on step creation and in the session snapshot copy |
+| `tests/workshop/GalleryStepSubmission.test.tsx` | Paste / drop / picker, double-submit guard, failure preserves input, caption-only edit keeps the stored `image_url` |
+| `tests/presenter/ProjectionWall.test.tsx` | Pre-reveal counting, reveal, post-reveal arrivals, distinct-participant counter, predicate-exit updates, PK-only deletes, hidden submissions, single PATCH under a key burst, broadcast sync |
+| `tests/e2e/core-flows.spec.ts` | Join, login, `/present` auth guard, and that the facilitator gate does not catch `/api/sessions/state` |
 
 ### Commands
 ```bash

@@ -166,6 +166,51 @@ export function parseStepInstructions(instructionMarkdown: string | null | undef
   return parsed;
 }
 
+/**
+ * Which participant-facing surfaces a step should render.
+ *
+ * A gallery step is stripped down deliberately: its prompt lives on the shared
+ * projected wall, so the phone/laptop shows only the title and the image
+ * submission control. Everything else on the step would compete with the room's
+ * attention or send the participant out to another tab mid-collection.
+ *
+ * The `showResponseField` rule is the legacy one, kept verbatim: an explicit
+ * `true` shows the field, an explicit `false` hides it, and `undefined` falls
+ * back to "required step or last step" for steps authored before the flag
+ * existed.
+ */
+export interface StepLayout {
+  /** Instruction sections, prompt blocks, AI-tool button, objective header card. */
+  showGuidedContent: boolean;
+  /** The standard free-text + optional image submission card. */
+  showResponseField: boolean;
+  /** The image-first gallery submission card. */
+  showGallerySubmission: boolean;
+}
+
+export function getStepLayout(
+  step: {
+    is_required?: boolean;
+    show_response_field?: boolean;
+    is_gallery_step?: boolean;
+  } | null | undefined,
+  isLastStep: boolean
+): StepLayout {
+  if (!step) {
+    return { showGuidedContent: false, showResponseField: false, showGallerySubmission: false };
+  }
+
+  if (step.is_gallery_step === true) {
+    return { showGuidedContent: false, showResponseField: false, showGallerySubmission: true };
+  }
+
+  const showResponseField =
+    step.show_response_field === true ||
+    (step.show_response_field !== false && (Boolean(step.is_required) || isLastStep));
+
+  return { showGuidedContent: true, showResponseField, showGallerySubmission: false };
+}
+
 export function parseChecklistItems(checklist: string | undefined): string[] {
   if (!checklist) return [];
 

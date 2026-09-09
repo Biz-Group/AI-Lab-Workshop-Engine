@@ -29,7 +29,48 @@ function mockJsonResponse(body: unknown) {
   } as Response);
 }
 
+interface PromptBlockFixture {
+  id: string;
+  title: string;
+  content_markdown: string;
+  order_index: number;
+  is_copyable: boolean;
+}
+
+interface StepFixture {
+  id: string;
+  title: string;
+  instruction_markdown: string;
+  order_index: number;
+  estimated_minutes: number | null;
+  is_required: boolean;
+  show_response_field?: boolean;
+  is_gallery_step?: boolean;
+  prompt_blocks: PromptBlockFixture[];
+}
+
 function createProps(submissions: Array<{ id: string; step_id: string; content: string; image_url?: string | null }> = []) {
+  const steps: StepFixture[] = [
+    {
+      id: 'step-1',
+      title: 'First Step',
+      instruction_markdown: 'Objective: Understand the task\nActions: Draft your response',
+      order_index: 0,
+      estimated_minutes: 5,
+      is_required: false,
+      prompt_blocks: [],
+    },
+    {
+      id: 'step-2',
+      title: 'Second Step',
+      instruction_markdown: 'Objective: Improve your draft',
+      order_index: 1,
+      estimated_minutes: 5,
+      is_required: false,
+      prompt_blocks: [],
+    },
+  ];
+
   return {
     session: {
       id: '11111111-1111-1111-1111-111111111111',
@@ -47,26 +88,7 @@ function createProps(submissions: Array<{ id: string; step_id: string; content: 
         title: 'Module 1',
         objective: 'Learn the fundamentals',
         order_index: 0,
-        steps: [
-          {
-            id: 'step-1',
-            title: 'First Step',
-            instruction_markdown: 'Objective: Understand the task\nActions: Draft your response',
-            order_index: 0,
-            estimated_minutes: 5,
-            is_required: false,
-            prompt_blocks: [],
-          },
-          {
-            id: 'step-2',
-            title: 'Second Step',
-            instruction_markdown: 'Objective: Improve your draft',
-            order_index: 1,
-            estimated_minutes: 5,
-            is_required: false,
-            prompt_blocks: [],
-          },
-        ],
+        steps,
       },
     ],
     participant: {
@@ -176,5 +198,149 @@ describe('WorkshopRunner soft gating', () => {
     expect(screen.getByText('You are here')).toBeTruthy();
     expect(screen.getByText('What To Do')).toBeTruthy();
     expect(screen.getByText('What this unlocks')).toBeTruthy();
+  });
+});
+
+describe('WorkshopRunner gallery steps', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url.includes('/api/questions') && (!init?.method || init.method === 'GET')) {
+        return mockJsonResponse({ success: true, data: [] });
+      }
+
+      if (url.includes('/api/sessions/state')) {
+        return mockJsonResponse({
+          success: true,
+          session: {
+            id: '11111111-1111-1111-1111-111111111111',
+            // The facilitator has moved to another step. Participants navigate
+            // freely, so this must not move them.
+            status: 'live',
+            currentStepId: 'step-2',
+            timerEndAt: null,
+          },
+        });
+      }
+
+      return mockJsonResponse({ success: true });
+    }) as typeof fetch;
+  });
+
+  function galleryProps(
+    submissions: Array<{ id: string; step_id: string; content: string; image_url?: string | null }> = []
+  ) {
+    const props = createProps(submissions);
+    props.modules[0].steps[0] = {
+      ...props.modules[0].steps[0],
+      title: 'Workplace 2030',
+      instruction_markdown:
+        'Objective: Generate an image of the workplace of 2030\nActions: Use your AI tool',
+      prompt_blocks: [
+        {
+          id: 'block-1',
+          title: 'Starter prompt',
+          content_markdown: 'A photo of a futuristic office',
+          order_index: 0,
+          is_copyable: true,
+        },
+      ],
+      is_gallery_step: true,
+    };
+    return props;
+  }
+
+  it('strips guided content down to the image submission surface', async () => {
+    render(<WorkshopRunner {...galleryProps()} />);
+
+    expect(screen.getByText('Gallery activity')).toBeTruthy();
+    expect(screen.getByText('Drop, paste or choose an image')).toBeTruthy();
+
+    // Hidden on a gallery step: the prompt lives on the projected wall.
+    expect(screen.queryByText('You are here')).toBeNull();
+    expect(screen.queryByText('What To Do')).toBeNull();
+    expect(screen.queryByText('Prompt Templates')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Open ChatGPT/ })).toBeNull();
+
+    // Facilitation lifelines stay.
+    expect(screen.getByRole('button', { name: /Ask a Question/ })).toBeTruthy();
+  });
+
+  it('shows the submitted confirmation when returning to a completed gallery step', async () => {
+    render(
+      <WorkshopRunner
+        {...galleryProps([
+          {
+            id: 'sub-1',
+            step_id: 'step-1',
+            content: 'my futuristic office',
+            image_url: 'https://example.test/img.png',
+          },
+        ])}
+      />
+    );
+
+    // Derived from the persisted submission, not from a transient just-submitted
+    // flag, so it survives navigating away and back.
+    expect(screen.getByText('Submitted')).toBeTruthy();
+    expect(screen.getByText('Your image has been sent to the gallery.')).toBeTruthy();
+    expect(screen.getByText('Look at the main screen 👀')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Edit submission/ })).toBeTruthy();
+    expect(screen.queryByText('Drop, paste or choose an image')).toBeNull();
+  });
+
+  it('lets an existing submission be edited without re-choosing an image', async () => {
+    render(
+      <WorkshopRunner
+        {...galleryProps([
+          {
+            id: 'sub-1',
+            step_id: 'step-1',
+            content: 'my futuristic office',
+            image_url: 'https://example.test/img.png',
+          },
+        ])}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit submission/ }));
+
+    // Caption-only edits must be possible: Save is enabled off the stored
+    // image, with no new file selected.
+    const save = await screen.findByRole('button', { name: /Save changes/ });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Caption (optional)') as HTMLTextAreaElement).value).toBe(
+      'my futuristic office'
+    );
+  });
+
+  it('leaves a guided step fully intact', async () => {
+    // The whole risk of adding guards to a ~1000 line component.
+    render(<WorkshopRunner {...createProps()} />);
+
+    expect(screen.getByText('You are here')).toBeTruthy();
+    expect(screen.getByText('What To Do')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Open ChatGPT/ })).toBeTruthy();
+    expect(screen.queryByText('Gallery activity')).toBeNull();
+  });
+
+  it('does not follow the facilitator step pointer', async () => {
+    render(<WorkshopRunner {...galleryProps()} />);
+
+    // The polled session state reports step-2 as current; the participant
+    // opened on step-1 and must stay there.
+    await waitFor(() => {
+      expect(
+        (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((call) =>
+          String(call[0]).includes('/api/sessions/state')
+        )
+      ).toBe(true);
+    });
+
+    expect(screen.getByRole('heading', { name: 'Workplace 2030' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Second Step' })).toBeNull();
   });
 });

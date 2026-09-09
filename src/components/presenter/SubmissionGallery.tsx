@@ -23,9 +23,16 @@ import {
   Maximize2,
   Search,
   Layers,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
+import {
+  useSessionSubmissions,
+  type SessionSubmissionImage,
+  type SessionSubmissionResponse,
+} from '@/lib/hooks/useSessionSubmissions';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 interface StepInfo {
@@ -35,24 +42,8 @@ interface StepInfo {
   isRequired: boolean;
 }
 
-interface GalleryImage {
-  id: string;
-  step_id: string;
-  image_url: string;
-  display_image_url: string;
-  content: string;
-  participant_name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TextResponse {
-  id: string;
-  step_id: string;
-  content: string;
-  participant_name: string;
-  created_at: string;
-}
+type GalleryImage = SessionSubmissionImage;
+type TextResponse = SessionSubmissionResponse;
 
 type ViewMode = 'images' | 'responses' | 'all';
 
@@ -67,20 +58,17 @@ interface SubmissionGalleryProps {
   steps: StepInfo[];
 }
 
-function buildVersionedImageUrl(url: string, updatedAt: string) {
-  const version = Date.parse(updatedAt);
-  if (Number.isNaN(version)) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}v=${version}`;
-}
-
 const SCROLL_EDGE_TOLERANCE = 2;
 
 export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
-  const [images, setImages] = useState<GalleryImage[]>([]);
-  const [responses, setResponses] = useState<TextResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Shared with the projected gallery wall; `refetch` preserves this page's
+  // long-standing "re-read everything on any change" behaviour.
+  const { images, responses, isLoading, refresh } = useSessionSubmissions({
+    sessionId: session.id,
+    mode: 'refetch',
+  });
   const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const [pendingHideId, setPendingHideId] = useState<string | null>(null);
   const [filterStepId, setFilterStepId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,6 +86,27 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
       stepChipRefs.current.set(stepId, element);
     },
     []
+  );
+
+  const toggleHiddenFromWall = useCallback(
+    async (image: GalleryImage) => {
+      setPendingHideId(image.id);
+      try {
+        const res = await fetch(`/api/admin/submissions/${image.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hidden_from_wall: !image.hidden_from_wall }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Could not update that submission');
+        await refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not update that submission');
+      } finally {
+        setPendingHideId(null);
+      }
+    },
+    [refresh]
   );
 
   const getOrderedStepChips = useCallback(() => {
@@ -184,94 +193,6 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
     }
   }, []);
 
-  // Fetch all image submissions
-  const fetchImages = useCallback(async () => {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from('submissions')
-      .select(`
-        id,
-        step_id,
-        image_url,
-        content,
-        created_at,
-        updated_at,
-        participant:participants(display_name)
-      `)
-      .eq('session_id', session.id)
-      .not('image_url', 'is', null)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      const mapped: GalleryImage[] = data.map((row) => {
-        const p = row.participant;
-        const name = Array.isArray(p) ? p[0]?.display_name : (p as { display_name: string } | null)?.display_name;
-        return {
-          id: row.id,
-          step_id: row.step_id,
-          image_url: row.image_url!,
-          display_image_url: buildVersionedImageUrl(
-            row.image_url!,
-            row.updated_at || row.created_at
-          ),
-          content: row.content || '',
-          participant_name: name || 'Unknown',
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-        };
-      });
-      setImages(mapped);
-    }
-  }, [session.id]);
-
-  // Fetch text responses (submissions with content, regardless of image)
-  const fetchResponses = useCallback(async () => {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from('submissions')
-      .select(`
-        id,
-        step_id,
-        content,
-        created_at,
-        participant:participants(display_name)
-      `)
-      .eq('session_id', session.id)
-      .not('content', 'is', null)
-      .neq('content', '')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      const mapped: TextResponse[] = data.map((row) => {
-        const p = row.participant;
-        const name = Array.isArray(p) ? p[0]?.display_name : (p as { display_name: string } | null)?.display_name;
-        return {
-          id: row.id,
-          step_id: row.step_id,
-          content: row.content!,
-          participant_name: name || 'Unknown',
-          created_at: row.created_at,
-        };
-      });
-      setResponses(mapped);
-    }
-  }, [session.id]);
-
-  // Fetch all data
-  const fetchAll = useCallback(async () => {
-    await Promise.all([fetchImages(), fetchResponses()]);
-    setIsLoading(false);
-  }, [fetchImages, fetchResponses]);
-
-  // Initial fetch
-  useEffect(() => {
-    queueMicrotask(() => {
-      void fetchAll();
-    });
-  }, [fetchAll]);
-
   useEffect(() => {
     const validIds = new Set(steps.map((step) => step.id));
     for (const key of stepChipRefs.current.keys()) {
@@ -328,64 +249,6 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
       queueMicrotask(() => setSelectedImage(updatedSelected));
     }
   }, [images, selectedImage]);
-
-  // Real-time subscription for submissions
-  useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel(`gallery:${session.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'submissions',
-          filter: `session_id=eq.${session.id}`,
-        },
-        () => {
-          fetchAll();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'submissions',
-          filter: `session_id=eq.${session.id}`,
-        },
-        () => {
-          fetchAll();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'submissions',
-          filter: `session_id=eq.${session.id}`,
-        },
-        () => {
-          fetchAll();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session.id, fetchAll]);
-
-  // Fallback refresh
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchAll();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [fetchAll]);
 
   // Group images by step
   const imagesByStep = steps
@@ -717,6 +580,12 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Maximize2 className="w-4 h-4 text-white drop-shadow-lg" />
                             </div>
+                            {img.hidden_from_wall && (
+                              <div className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+                                <EyeOff className="h-2.5 w-2.5" />
+                                Hidden
+                              </div>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -856,6 +725,30 @@ export function SubmissionGallery({ session, steps }: SubmissionGalleryProps) {
               <p className="text-white/40 text-xs mt-0.5">
                 {currentIndex + 1} of {filteredImages.length}
               </p>
+              {/* The wall's Hide action is only recoverable from here. */}
+              <button
+                type="button"
+                onClick={() => void toggleHiddenFromWall(selectedImage)}
+                disabled={pendingHideId === selectedImage.id}
+                className={cn(
+                  'mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  selectedImage.hidden_from_wall
+                    ? 'border-amber-400/50 bg-amber-400/15 text-amber-200 hover:bg-amber-400/25'
+                    : 'border-white/25 text-white/70 hover:border-white/50 hover:text-white'
+                )}
+              >
+                {selectedImage.hidden_from_wall ? (
+                  <>
+                    <Eye className="h-3.5 w-3.5" />
+                    Hidden from wall &mdash; show again
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide from wall
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

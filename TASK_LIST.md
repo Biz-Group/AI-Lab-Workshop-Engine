@@ -1,6 +1,6 @@
 # AI Workshop Runner - Task List
 
-**Last Updated:** May 21, 2026  
+**Last Updated:** September 9, 2026  
 **Project Status:** Production-Ready (Active Development)
 
 ---
@@ -14,7 +14,7 @@
 - [x] ESLint + Vitest setup
 - [x] Environment variables + deployment config
 
-### #2 — Database Schema (23 migrations)
+### #2 — Database Schema (28 migrations)
 - [x] Core tables: organizations, facilitator_users, templates, modules, steps, prompt_blocks
 - [x] Session snapshot tables (frozen copies at session creation)
 - [x] Participant data: participants, submissions, votes, analytics_events
@@ -27,6 +27,8 @@
 - [x] Storage buckets: prompt-packs, submission-images, org-logos
 - [x] Performance indexes (migration 013)
 - [x] Prompt pack email tracking (prompt_pack_emailed_at on participants)
+- [x] Per-step response toggle (show_response_field, migration 027)
+- [x] Gallery steps + wall moderation (is_gallery_step, hidden_from_wall, migration 028)
 
 ### #3 — Dual Auth System
 - [x] Supabase Auth for facilitators (email + password)
@@ -167,25 +169,61 @@
 - [x] Self-registration approval flow (no email invitations)
 - [x] Full role management (owner/admin/facilitator) with safeguards (can't demote/remove self)
 
+### #21 — Gallery Steps & Projected Gallery Wall
+- [x] Migration 028: is_gallery_step on module_steps, session_snapshot_steps, activity_library_steps
+- [x] Migration 028: hidden_from_wall on submissions + partial index for the wall query
+- [x] Migration 028: idempotent ALTER PUBLICATION for submissions + participants (003/009 left these commented out)
+- [x] FIXED: /api/admin/steps validated show_response_field but never inserted it (could only be set via PATCH)
+- [x] Gallery flag threaded through all 11 step-write paths (snapshot create/resync, library sync, insert-into-template, save-from-template, duplicate x3)
+- [x] show_response_field added to activity_library_steps, closing the library round-trip reset
+- [x] getStepLayout() in step-instructions.ts - single source for the participant step layout rule
+- [x] TemplateEditor "Gallery step" checkbox (edit modal + Add Step modal)
+- [x] GalleryStepSubmission: drag-drop + file picker + clipboard paste (Ctrl/Cmd+V)
+- [x] Client-side downscale to WebP above ~4MB/2400px (the 5MB upload cap rejects high-res AI PNGs)
+- [x] Inline submission state machine (empty/ready/uploading/saving/submitted/error), no toast reliance
+- [x] Double-submit guard set synchronously before the first await
+- [x] Caption-only edit preserves the stored image_url (never sends null)
+- [x] Submitted state derived from existingSubmission, so it survives navigating away and back
+- [x] Server-side rule: a gallery step requires an image
+- [x] Two-way presenter <-> wall step sync over the previously dead workshop-broadcast channel
+- [x] useSessionSubmissions hook shared by SubmissionGallery (refetch) and the wall (incremental)
+- [x] Incremental mode handles predicate-exit updates, PK-only deletes, and missing participant names
+- [x] /session/[sessionId]/present route + dark loading override (shared skeleton renders the console)
+- [x] proxy.ts widened to startsWith('/session/') - covers /present and closes the unguarded /gallery hole
+- [x] Pre-reveal collection state ("Your gallery is filling up...") with distinct-participant counter
+- [x] Reveal-on-command; later arrivals appear automatically without a second press
+- [x] Responsive grid with a minimum tile size, paginating instead of shrinking indefinitely
+- [x] Spotlight (object-contain, Backspace/click dismiss - Escape is owned by the Fullscreen API)
+- [x] Independent Names (default off) and Captions (default on) toggles
+- [x] Hide from wall, persisted via /api/admin/submissions/[submissionId], reversible from the admin gallery
+- [x] Fullscreen derived from document.fullscreenElement with both event prefixes
+- [x] Errors rendered inside the wall subtree (Toaster sits outside it and is invisible in fullscreen)
+- [x] Reduced-motion coverage for the new .wall-* animation and transition classes
+- [x] Tests: gallery-step-flag (4), GalleryStepSubmission (11), ProjectionWall (18), WorkshopRunner gallery (5), e2e guards (2)
+
+**Operational constraint:** gallery steps must be marked in the template BEFORE a session is
+created. Resync deletes session_snapshot_modules, which cascades to submissions, and is refused
+once a session is live.
+
 ---
 
 ## 📋 Open Tasks
 
-### #21 — Error Handling & Edge Cases
+### #22 — Error Handling & Edge Cases
 **Priority:** MEDIUM
 - [ ] Graceful handling of expired/invalid join codes
 - [ ] Session token expiration UX
 - [ ] Real-time reconnection improvements
 - [ ] Network error user feedback
 
-### #22 — Mobile Optimization
+### #23 — Mobile Optimization
 **Priority:** MEDIUM
 - [ ] Workshop runner mobile layout polish
 - [ ] Presenter mode tablet view
 - [ ] Touch interaction improvements
 - [ ] Mobile keyboard overlap fix
 
-### #23 — Accessibility
+### #24 — Accessibility
 **Priority:** MEDIUM
 - [ ] Keyboard navigation testing
 - [ ] Screen reader compatibility
@@ -193,14 +231,14 @@
 - [ ] Focus management in modals
 - [ ] Color contrast validation
 
-### #24 — Performance Optimization
+### #25 — Performance Optimization
 **Priority:** LOW
 - [ ] React.memo for heavy components
 - [ ] Lazy load non-critical components
 - [ ] Bundle size analysis
 - [ ] Image optimization
 
-### #25 — Documentation
+### #26 — Documentation
 **Priority:** LOW
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Facilitator user guide
@@ -286,6 +324,39 @@
 ---
 
 ## 🔄 Change Log
+
+### September 9, 2026 (Gallery Steps & Projected Gallery Wall)
+- **NEW:** Gallery steps - a per-step flag turning a step into an image-submission activity
+  projected on a shared big screen (Mentimeter-style), with reveal-on-command
+- **NEW:** Migration 028 - is_gallery_step (module_steps, session_snapshot_steps,
+  activity_library_steps), hidden_from_wall (submissions), partial wall index, and idempotent
+  realtime publication statements
+- **NEW:** /session/[sessionId]/present - chrome-free projected wall with fullscreen, responsive
+  grid, pagination, spotlight, Names/Captions toggles and hide-from-wall moderation
+- **NEW:** GalleryStepSubmission - drag-drop, file picker and clipboard paste, large
+  object-contain preview, optional caption, and an inline submission state machine
+- **NEW:** /api/admin/submissions/[submissionId] - facilitator moderation (facilitators have
+  SELECT-only RLS on submissions)
+- **NEW:** useSessionSubmissions hook - one fetch/realtime/poll implementation shared by the
+  admin gallery (refetch) and the wall (incremental)
+- **NEW:** Client-side image downscale to WebP - high-resolution AI PNGs exceeded the 5MB
+  upload cap and were rejected at the end of the submit flow
+- **FIXED:** /api/admin/steps validated show_response_field but omitted it from the insert, so
+  the flag could only ever be set by a later PATCH, never at step creation
+- **FIXED:** show_response_field was absent from activity_library_steps, so a save-to-library →
+  insert-into-template round trip silently reset it
+- **FIXED:** proxy.ts guarded paths containing '/presenter', which left /session/*/gallery
+  unguarded and would have missed /present entirely; now startsWith('/session/')
+- **NEW:** Two-way presenter ↔ wall step sync over workshop-broadcast:{sessionId} - the channel
+  existed but had no listeners, and nothing in the app observes the sessions table
+- **NEW:** getStepLayout() - single source for the participant step layout rule, previously
+  duplicated between WorkshopRunner and TemplatePreview
+- **CONFIRMED:** Participants keep free navigation; a regression test asserts the facilitator's
+  step pointer cannot move them
+- **TESTS:** 188 unit tests passing (26 files, +38), 6 e2e passing (+2)
+- **DEFERRED:** Multi-entry submissions remain Phase 2 (PostgREST cannot use a partial unique
+  index as an ON CONFLICT arbiter, the storage key has no per-submission entropy, and the
+  prompt-pack PDF keys submissions by step_id in a Map)
 
 ### February 10, 2026 (Late Night Update - Final)
 - **FIXED:** Service role client using wrong authentication method

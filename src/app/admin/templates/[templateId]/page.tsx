@@ -26,6 +26,8 @@ interface TemplateStepRow {
   ai_tool_name: string | null;
   ai_tool_url: string | null;
   show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   prompt_blocks?: TemplatePromptBlockRow[] | null;
 }
 
@@ -77,6 +79,8 @@ export default async function TemplateDetailPage({ params }: PageProps) {
           ai_tool_name,
           ai_tool_url,
           show_response_field,
+          is_gallery_step,
+          reference_image_url,
           prompt_blocks(
             id,
             title,

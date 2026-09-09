@@ -30,7 +30,8 @@ import {
 import { NarrativeProgressMap } from './NarrativeProgressMap';
 import { StepNarrativeSections } from './StepNarrativeSections';
 import { ChapterCelebration, useChapterCelebration } from './ChapterCelebration';
-import { parseStepInstructions } from '@/lib/utils';
+import { GalleryStepSubmission } from './GalleryStepSubmission';
+import { getStepLayout, parseStepInstructions } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 const SESSION_STATE_POLL_INTERVAL_MS = 5_000;
@@ -52,6 +53,7 @@ interface Step {
   estimated_minutes: number | null;
   is_required: boolean;
   show_response_field?: boolean;
+  is_gallery_step?: boolean;
   ai_tool_name?: string;
   ai_tool_url?: string;
   prompt_blocks: PromptBlockType[];
@@ -163,6 +165,9 @@ export function WorkshopRunner({
 
   const currentStep = allSteps[currentStepIndex];
   const isLastStep = currentStepIndex === allSteps.length - 1;
+  // Gallery steps hide the guided content because the prompt is on the shared
+  // screen; see getStepLayout for the full rule.
+  const stepLayout = getStepLayout(currentStep, isLastStep);
   const existingSubmission = submissions.find(s => s.step_id === currentStep?.id);
   const hasEffectiveImage = !!imageFile || (!!existingSubmission?.image_url && !imageMarkedForRemoval);
   const canSubmit = submissionContent.trim().length > 0 || hasEffectiveImage;
@@ -561,23 +566,25 @@ export function WorkshopRunner({
               </span>
             </div>
           </div>
-          <div className="mt-4 rounded-2xl border border-white/40 bg-white/70 px-4 py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">You are here</p>
-                <p className="text-sm font-medium text-gray-900">
-                  {parsedInstructions.objective || currentStep.moduleTitle}
-                </p>
-                <p className="text-sm text-gray-600 mt-1">
-                  {parsedInstructions.deliverable || 'Work through this step, capture your best response, and keep moving through the session.'}
-                </p>
-              </div>
-              <div className="md:max-w-sm">
-                <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">What this unlocks</p>
-                <p className="text-sm text-gray-700">{nextUpCopy}</p>
+          {stepLayout.showGuidedContent && (
+            <div className="mt-4 rounded-2xl border border-white/40 bg-white/70 px-4 py-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">You are here</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {parsedInstructions.objective || currentStep.moduleTitle}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {parsedInstructions.deliverable || 'Work through this step, capture your best response, and keep moving through the session.'}
+                  </p>
+                </div>
+                <div className="md:max-w-sm">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-400 mb-1">What this unlocks</p>
+                  <p className="text-sm text-gray-700">{nextUpCopy}</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </header>
 
         {/* Mobile progress button (tap to expand) */}
@@ -631,10 +638,12 @@ export function WorkshopRunner({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className={`max-w-3xl mx-auto space-y-4 transition-all duration-150 ${isStepTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
-            <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
+            {stepLayout.showGuidedContent && (
+              <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
+            )}
 
             {/* Prompt Blocks */}
-            {currentStep.prompt_blocks.length > 0 && (
+            {stepLayout.showGuidedContent && currentStep.prompt_blocks.length > 0 && (
               <div className="space-y-4">
                 <h3 className="font-medium text-gray-900">Prompt Templates</h3>
                 {currentStep.prompt_blocks.map((block) => (
@@ -650,17 +659,37 @@ export function WorkshopRunner({
             )}
 
             {/* AI Tool Button */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={openAITool}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open {currentStep?.ai_tool_name || initialSession.aiToolName || 'ChatGPT'}
-            </Button>
+            {stepLayout.showGuidedContent && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={openAITool}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open {currentStep?.ai_tool_name || initialSession.aiToolName || 'ChatGPT'}
+              </Button>
+            )}
+
+            {/* Gallery submission: image-first, projected on the shared screen */}
+            {stepLayout.showGallerySubmission && (
+              <GalleryStepSubmission
+                sessionId={initialSession.id}
+                participantId={participant.id}
+                stepId={currentStep.id}
+                prompt={parsedInstructions.objective || currentStep.title}
+                existingSubmission={existingSubmission}
+                onSubmitted={(submission) => {
+                  setSubmissions(prev => [
+                    ...prev.filter(s => s.step_id !== submission.step_id),
+                    submission,
+                  ]);
+                }}
+                onLogEvent={logEvent}
+              />
+            )}
 
             {/* Submission Area */}
-            {(currentStep.show_response_field === true || (currentStep.show_response_field !== false && (currentStep.is_required || isLastStep))) && (
+            {stepLayout.showResponseField && (
               <Card>
                 <CardContent className="p-6 space-y-4">
                   <h3 className="font-medium text-gray-900">
@@ -773,7 +802,8 @@ export function WorkshopRunner({
               </Card>
             )}
 
-            {recentSubmissionStepId === currentStep.id && (
+            {/* Gallery steps carry their own submitted state, so this would stack. */}
+            {!stepLayout.showGallerySubmission && recentSubmissionStepId === currentStep.id && (
               <Card className="border-emerald-200 bg-emerald-50/80">
                 <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>

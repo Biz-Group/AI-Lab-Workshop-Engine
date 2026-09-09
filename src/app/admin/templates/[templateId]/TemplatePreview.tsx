@@ -15,7 +15,7 @@ import { Button, Card, CardContent } from '@/components/ui';
 import { NarrativeProgressMap } from '@/components/workshop/NarrativeProgressMap';
 import { StepNarrativeSections } from '@/components/workshop/StepNarrativeSections';
 import { ChapterCelebration, useChapterCelebration } from '@/components/workshop/ChapterCelebration';
-import { cn, parseStepInstructions } from '@/lib/utils';
+import { cn, getStepLayout, parseStepInstructions } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 interface PromptBlockType {
@@ -33,6 +33,7 @@ interface Step {
   estimated_minutes: number | null;
   is_required: boolean;
   show_response_field?: boolean;
+  is_gallery_step?: boolean;
   order_index: number;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
@@ -187,6 +188,9 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
   const totalSteps = allSteps.length;
   const currentStep = allSteps[currentStepIndex];
   const isLastStep = currentStepIndex === totalSteps - 1;
+  // Shared with WorkshopRunner so the preview cannot drift from what
+  // participants actually see on a gallery step.
+  const stepLayout = getStepLayout(currentStep, isLastStep);
   const parsedInstructions = parseStepInstructions(currentStep?.instruction_markdown || '');
   const nextStepTitle = allSteps[currentStepIndex + 1]?.title ?? null;
 
@@ -350,9 +354,11 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl mx-auto space-y-6">
-            <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
+            {stepLayout.showGuidedContent && (
+              <StepNarrativeSections instructions={parsedInstructions} className="space-y-4" />
+            )}
 
-            {!parsedInstructions.actions && currentStep.instruction_markdown && (
+            {stepLayout.showGuidedContent && !parsedInstructions.actions && currentStep.instruction_markdown && (
               <Card className="border-l-4 border-l-brand-400 shadow-sm">
                 <CardContent className="p-6">
                   <FormattedContent
@@ -364,7 +370,7 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
             )}
 
             {/* Prompt Blocks */}
-            {currentStep.prompt_blocks.length > 0 && (
+            {stepLayout.showGuidedContent && currentStep.prompt_blocks.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium text-gray-900">Prompt Templates</h3>
@@ -384,8 +390,27 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
               </div>
             )}
 
+            {/* Gallery submission placeholder */}
+            {stepLayout.showGallerySubmission && (
+              <Card className="shadow-sm">
+                <CardContent className="p-6 space-y-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-brand-600">
+                    Gallery activity
+                  </p>
+                  <h3 className="text-lg font-semibold text-gray-900 leading-snug">
+                    {parsedInstructions.objective || currentStep.title}
+                  </h3>
+                  <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-gray-400 text-sm">
+                    Participants drop, paste or choose an image plus an optional caption.
+                    Instructions, prompt blocks and the AI tool button are hidden -- the
+                    prompt lives on the projected gallery wall.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Submission placeholder (for required steps or last step) */}
-            {(currentStep.show_response_field === true || (currentStep.show_response_field !== false && (currentStep.is_required || isLastStep))) && (
+            {stepLayout.showResponseField && (
               <Card className="shadow-sm">
                 <CardContent className="p-6">
                   <h3 className="font-medium text-gray-900 mb-3">
@@ -399,14 +424,16 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
             )}
 
             {/* AI Tool Button */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => window.open(currentStep.ai_tool_url || aiToolUrl, '_blank')}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open {currentStep.ai_tool_name || aiToolName}
-            </Button>
+            {stepLayout.showGuidedContent && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => window.open(currentStep.ai_tool_url || aiToolUrl, '_blank')}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open {currentStep.ai_tool_name || aiToolName}
+              </Button>
+            )}
           </div>
         </div>
 

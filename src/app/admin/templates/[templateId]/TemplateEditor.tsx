@@ -61,6 +61,8 @@ interface Step {
   estimated_minutes: number | null;
   is_required: boolean;
   show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   order_index: number;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
@@ -216,12 +218,24 @@ export function TemplateEditor({ template: initialTemplate }: { template: Templa
     }));
   }, []);
 
-  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; show_response_field?: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => {
+  const handleStepAdded = useCallback((moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; show_response_field?: boolean; is_gallery_step?: boolean; reference_image_url?: string | null; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => {
     setTemplate(prev => ({
       ...prev,
       modules: prev.modules.map(m =>
         m.id === moduleId
-          ? { ...m, steps: [...m.steps, { ...newStep, show_response_field: newStep.show_response_field ?? true, prompt_blocks: newStep.prompt_blocks ?? [] }] }
+          ? {
+              ...m,
+              steps: [
+                ...m.steps,
+                {
+                  ...newStep,
+                  show_response_field: newStep.show_response_field ?? true,
+                  is_gallery_step: newStep.is_gallery_step ?? false,
+                  reference_image_url: newStep.reference_image_url ?? null,
+                  prompt_blocks: newStep.prompt_blocks ?? [],
+                },
+              ],
+            }
           : m
       ),
     }));
@@ -875,7 +889,7 @@ function SortableModuleCard(props: {
 }
 
 // ─── Module Card (collapsible) ──────────────────────────────────────────
-function ModuleCard({ module: mod, displayIndex, dragHandleProps, sensors, isExpanded, onToggleExpand, allModules, onModuleAdded, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
+function ModuleCard({ module: mod, displayIndex, templateId, dragHandleProps, sensors, isExpanded, onToggleExpand, allModules, onModuleAdded, onModuleUpdated, onModuleDeleted, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onStepsReorder, onBlocksReorder }: {
   module: Module;
   displayIndex: number;
   templateId: string;
@@ -1089,6 +1103,7 @@ function ModuleCard({ module: mod, displayIndex, dragHandleProps, sensors, isExp
                           key={step.id}
                           step={step}
                           moduleId={mod.id}
+                          templateId={templateId}
                           sensors={sensors}
                           allModules={allModules}
                           onStepAdded={onStepAdded}
@@ -1106,7 +1121,7 @@ function ModuleCard({ module: mod, displayIndex, dragHandleProps, sensors, isExp
                 </div>
               )}
               <div className="pl-4">
-                <AddStepButton moduleId={mod.id} onAdded={(newStep) => onStepAdded(mod.id, newStep)} />
+                <AddStepButton moduleId={mod.id} templateId={templateId} onAdded={(newStep) => onStepAdded(mod.id, newStep)} />
               </div>
             </div>
           </div>
@@ -1155,6 +1170,7 @@ function ModuleCard({ module: mod, displayIndex, dragHandleProps, sensors, isExp
 function SortableStepRow(props: {
   step: Step;
   moduleId: string;
+  templateId: string;
   sensors?: ReturnType<typeof useSensors>;
   allModules?: Module[];
   onStepAdded?: (moduleId: string, newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null; prompt_blocks?: PromptBlock[] }) => void;
@@ -1194,9 +1210,10 @@ function SortableStepRow(props: {
 }
 
 // ─── Step Row (collapsible) ─────────────────────────────────────────────
-function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onBlocksReorder }: {
+function StepRow({ step, moduleId, templateId, dragHandleProps, sensors, allModules, onStepAdded, onStepUpdated, onStepDeleted, onStepMoved, onBlockAdded, onBlockUpdated, onBlockDeleted, onBlocksReorder }: {
   step: Step;
   moduleId: string;
+  templateId: string;
   dragHandleProps?: Record<string, unknown>;
   sensors?: ReturnType<typeof useSensors>;
   allModules?: Module[];
@@ -1219,6 +1236,8 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
     estimated_minutes: step.estimated_minutes,
     is_required: step.is_required,
     show_response_field: step.show_response_field ?? true,
+    is_gallery_step: step.is_gallery_step ?? false,
+    reference_image_url: step.reference_image_url ?? null as string | null,
     ai_tool_name: step.ai_tool_name || '',
     ai_tool_url: step.ai_tool_url || '',
   });
@@ -1380,6 +1399,8 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
                 estimated_minutes: step.estimated_minutes,
                 is_required: step.is_required,
                 show_response_field: step.show_response_field ?? true,
+                is_gallery_step: step.is_gallery_step ?? false,
+                reference_image_url: step.reference_image_url ?? null,
                 ai_tool_name: step.ai_tool_name || '',
                 ai_tool_url: step.ai_tool_url || '',
               });
@@ -1494,6 +1515,28 @@ function StepRow({ step, moduleId, dragHandleProps, sensors, allModules, onStepA
               />
               Show response section
             </label>
+            <label className="inline-flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={editForm.is_gallery_step}
+                onChange={(e) => setEditForm(prev => ({ ...prev, is_gallery_step: e.target.checked }))}
+              />
+              <span>
+                Gallery step
+                <span className="block text-xs text-gray-500">
+                  Participants submit an image and optional caption, projected on the shared
+                  gallery wall. Must be set before the session is created.
+                </span>
+              </span>
+            </label>
+            {editForm.is_gallery_step && (
+              <ReferenceImageUploader
+                templateId={templateId}
+                imageUrl={editForm.reference_image_url}
+                onChange={(url) => setEditForm(prev => ({ ...prev, reference_image_url: url }))}
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -1747,13 +1790,14 @@ function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockAdded
 // ─── Add Step Button ────────────────────────────────────────────────────
 function AddStepButton({ moduleId, onAdded }: {
   moduleId: string;
-  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
+  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; is_gallery_step: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [instructionMarkdown, setInstructionMarkdown] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState(5);
   const [isRequired, setIsRequired] = useState(false);
+  const [isGalleryStep, setIsGalleryStep] = useState(false);
   const [aiToolName, setAiToolName] = useState('');
   const [aiToolUrl, setAiToolUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -1771,6 +1815,7 @@ function AddStepButton({ moduleId, onAdded }: {
           instruction_markdown: instructionMarkdown.trim() || '',
           estimated_minutes: estimatedMinutes,
           is_required: isRequired,
+          is_gallery_step: isGalleryStep,
           ai_tool_name: aiToolName.trim() || null,
           ai_tool_url: aiToolUrl.trim() || null,
         }),
@@ -1785,6 +1830,7 @@ function AddStepButton({ moduleId, onAdded }: {
         instruction_markdown: instructionMarkdown.trim() || '',
         estimated_minutes: estimatedMinutes,
         is_required: isRequired,
+        is_gallery_step: isGalleryStep,
         ai_tool_name: aiToolName.trim() || null,
         ai_tool_url: aiToolUrl.trim() || null,
       });
@@ -1792,6 +1838,7 @@ function AddStepButton({ moduleId, onAdded }: {
       setInstructionMarkdown('');
       setEstimatedMinutes(5);
       setIsRequired(false);
+      setIsGalleryStep(false);
       setAiToolName('');
       setAiToolUrl('');
       setIsOpen(false);
@@ -1814,7 +1861,7 @@ function AddStepButton({ moduleId, onAdded }: {
         <span className="text-xs font-medium text-gray-500 group-hover:text-brand-700 transition-colors">Add Step</span>
         <Plus className="w-3 h-3 ml-auto text-gray-400 group-hover:text-brand-600 transition-colors" />
       </button>
-      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setAiToolName(''); setAiToolUrl(''); }} title="Add Step">
+      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setAiToolName(''); setAiToolUrl(''); }} title="Add Step">
         <div className="space-y-4">
           <Input
             label="Step Title"
@@ -1839,14 +1886,31 @@ function AddStepButton({ moduleId, onAdded }: {
             onChange={(e) => setEstimatedMinutes(Math.max(1, parseInt(e.target.value) || 1))}
             min={1}
           />
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={isRequired}
-              onChange={(e) => setIsRequired(e.target.checked)}
-            />
-            Required step
-          </label>
+          <div className="flex flex-col gap-2">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={isRequired}
+                onChange={(e) => setIsRequired(e.target.checked)}
+              />
+              Required step
+            </label>
+            <label className="inline-flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={isGalleryStep}
+                onChange={(e) => setIsGalleryStep(e.target.checked)}
+              />
+              <span>
+                Gallery step
+                <span className="block text-xs text-gray-500">
+                  Participants submit an image and optional caption, projected on the shared
+                  gallery wall. Must be set before the session is created.
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="AI Tool Button Label (optional)"
@@ -1862,7 +1926,7 @@ function AddStepButton({ moduleId, onAdded }: {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setAiToolName(''); setAiToolUrl(''); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setAiToolName(''); setAiToolUrl(''); }}>Cancel</Button>
             <Button onClick={handleAdd} disabled={!title.trim() || isSaving}>
               {isSaving ? 'Adding...' : 'Add Step'}
             </Button>

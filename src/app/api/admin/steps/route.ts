@@ -11,6 +11,8 @@ const createStepSchema = z.object({
   estimated_minutes: z.number().int().min(1).max(120).nullable().optional(),
   is_required: z.boolean().default(false),
   show_response_field: z.boolean().default(true),
+  is_gallery_step: z.boolean().default(false),
+  reference_image_url: z.string().url().max(2000).nullable().optional(),
   order_index: z.number().int().min(0).optional(),
   ai_tool_name: z.string().max(100).nullable().optional(),
   ai_tool_url: z.string().url().max(2000).nullable().optional(),
@@ -68,11 +70,14 @@ export async function POST(request: NextRequest) {
         instruction_markdown: validation.data.instruction_markdown,
         estimated_minutes: validation.data.estimated_minutes ?? null,
         is_required: validation.data.is_required,
+        show_response_field: validation.data.show_response_field,
+        is_gallery_step: validation.data.is_gallery_step,
+        reference_image_url: validation.data.reference_image_url ?? null,
         order_index: orderIndex,
         ai_tool_name: validation.data.ai_tool_name ?? null,
         ai_tool_url: validation.data.ai_tool_url ?? null,
       })
-      .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required, ai_tool_name, ai_tool_url')
+      .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, ai_tool_name, ai_tool_url')
       .single();
 
     if (error) {

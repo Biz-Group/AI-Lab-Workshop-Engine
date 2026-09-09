@@ -72,6 +72,8 @@ export async function GET(
             estimated_minutes,
             is_required,
             show_response_field,
+            is_gallery_step,
+            reference_image_url,
             ai_tool_name,
             ai_tool_url,
             prompt_blocks(

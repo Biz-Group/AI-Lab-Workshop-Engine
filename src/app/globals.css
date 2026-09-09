@@ -141,6 +141,78 @@ input, select, textarea {
   @apply text-6xl font-mono text-gray-700;
 }
 
+/* ============================================================================
+   Projected gallery wall
+   ============================================================================
+   Kept separate from the .presenter-* classes above, which are light-theme
+   (text-gray-900 / text-gray-700) and would be near-invisible here. Those are
+   also declared after @tailwind utilities and outside any layer, so they beat
+   the utility classes meant to override them; declaring the wall inside
+   @layer components keeps utilities winning. */
+@layer components {
+  .wall-root {
+    /* Explicit opaque background. The fullscreen ::backdrop is black while the
+       element itself is transparent, and body carries the brand gradient -- so
+       without this the wall would be green-blue outside fullscreen and black
+       inside, switching at the worst possible moment. */
+    background-color: #0b1020;
+    color: #f8fafc;
+  }
+
+  .wall-prompt {
+    @apply font-semibold leading-tight tracking-tight;
+    text-wrap: balance;
+  }
+
+  .wall-tile {
+    @apply relative overflow-hidden rounded-xl;
+    background-color: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 200ms ease, outline-color 200ms ease;
+  }
+
+  .wall-controls {
+    transition: opacity 300ms ease;
+  }
+}
+
+/* Restrained motion: this should read as a designed workshop moment, not an
+   admin table refreshing. No bounce, no spin, nothing long. */
+.wall-tile-enter {
+  animation: wallTileEnter 280ms ease-out both;
+}
+
+.wall-reveal-enter {
+  /* Same motion, but callers add an inline animation-delay to stagger. */
+  animation: wallTileEnter 320ms ease-out both;
+}
+
+.wall-spotlight-enter {
+  animation: wallSpotlightEnter 220ms ease-out both;
+}
+
+@keyframes wallTileEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes wallSpotlightEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Copy button animation */
 .copy-success {
   animation: copyPulse 0.4s ease-out;
@@ -471,6 +543,23 @@ input, select, textarea {
   .step-transition-enter {
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  /* Projected gallery wall. This block enumerates classes explicitly, so any
+     new animation is unprotected until it is listed here. */
+  .wall-tile-enter,
+  .wall-reveal-enter,
+  .wall-spotlight-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* The block above only ever cancels `animation`, so wall transitions need
+     their own escape hatch. */
+  .wall-controls,
+  .wall-tile {
+    transition-duration: 0.01ms !important;
   }
 }
 

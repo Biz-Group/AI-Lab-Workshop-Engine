@@ -11,23 +11,25 @@ export async function proxy(request: NextRequest) {
     cookie => cookie.name.includes('sb-') && cookie.name.includes('auth-token')
   );
 
-  // Protected admin routes require authentication
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    // If no auth cookie, redirect to login
-    if (!hasAuthCookie) {
-      const loginUrl = new URL('/auth/login', request.url);
-      loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-  }
+  const { pathname } = request.nextUrl;
 
-  // Presenter routes also require authentication
-  if (request.nextUrl.pathname.includes('/presenter')) {
-    if (!hasAuthCookie) {
-      const loginUrl = new URL('/auth/login', request.url);
-      loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  // Admin and every facilitator-facing session surface (/presenter, /gallery,
+  // /present) require authentication.
+  //
+  // Matched with startsWith('/session/'), NOT includes('/session'): the matcher
+  // below does not exclude /api/sessions/state, which every participant polls
+  // every 5s. A substring test would redirect that poll to the login page, and
+  // participants would silently lose status and timer updates.
+  //
+  // This is only a cheap cookie-presence check -- it never validates the token.
+  // Each page still verifies the facilitator's org membership server-side.
+  const requiresFacilitatorAuth =
+    pathname.startsWith('/admin') || pathname.startsWith('/session/');
+
+  if (requiresFacilitatorAuth && !hasAuthCookie) {
+    const loginUrl = new URL('/auth/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;

@@ -222,6 +222,69 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SESSION_TOKEN_SECRET=your-32-character-secret
 ```
 
+## Running a Gallery Activity (Projected Gallery Wall)
+
+A **gallery step** turns a step into an image activity: participants generate an image in an AI
+tool, drop or paste it into Workshop Copilot, and it appears on a shared screen the whole room
+watches once you reveal it.
+
+### ⚠️ Mark gallery steps BEFORE creating the session
+
+Sessions freeze a copy of the template at creation time. Ticking "Gallery step" on a template
+afterwards does **not** reach a session that already exists, and the only mechanism that would
+re-copy it (**Resync**) deletes the session's snapshot — which cascade-deletes **every submission
+already collected**. Resync is also refused once a session is live.
+
+So the order is: tick the box in the template → *then* create the session.
+
+### Setup
+
+1. In the template editor, open a step and tick **Gallery step**.
+   Instructions, prompt blocks and the AI-tool button are hidden for participants on that step,
+   because the prompt belongs on the big screen. Write the activity prompt as the step's
+   `Objective:` line — that is what the wall displays large.
+2. Create a session from that template and start it.
+3. Open **Project Gallery Wall** from the presenter console's quick actions (opens in a new tab)
+   and drag that tab to the projector, then press the fullscreen control or `F`.
+
+### Running it
+
+| Action | Control | Key |
+|---|---|---|
+| Previous / next gallery activity | Arrows in the control bar | `←` / `→` |
+| Reveal (or re-hide) responses | Reveal / Revealed | `R` |
+| Show or hide participant names | Names | `N` |
+| Show or hide captions | Captions | `C` |
+| Fullscreen | Maximise icon | `F` |
+| Page through a large gallery | Page arrows (appear only when needed) | `PageUp` / `PageDown` |
+| Spotlight one image | Click a tile | — |
+| Leave spotlight | Click anywhere, or Back to gallery | `Backspace` |
+| Spotlight a random image | Random | — |
+
+Before you reveal, the wall shows a live count ("18 / 24 submitted") and nothing else, which
+builds anticipation and stops the room anchoring on whoever submitted first. **You only press
+Reveal once** — anyone who submits afterwards appears automatically.
+
+`Backspace` closes the spotlight rather than `Escape`, because browsers reserve `Escape` for
+leaving fullscreen and will not let a page intercept it.
+
+### If somebody submits something you would rather not show
+
+Click the tile to spotlight it, then **Hide from wall**. It disappears from the projected wall
+immediately and stays hidden across refreshes. To bring it back, open the Submission Gallery,
+click the image, and choose **show again**. Submissions are visible by default — this is a safety
+valve, not an approval queue.
+
+### Notes
+
+- Participants keep navigating at their own pace. Changing the activity on the wall does **not**
+  move anyone's screen.
+- The status indicator top-right reads **Live** when updates are streaming. **Reconnecting…** means
+  it has fallen back to polling — submissions still arrive, just a few seconds slower.
+- Reveal state resets if you refresh the projector tab.
+- Large images are shrunk automatically in the participant's browser before upload, so nobody hits
+  the 5MB limit.
+
 ## Testing the Flow
 
 1. **Sign Up:** Go to `/auth/login` → Create account

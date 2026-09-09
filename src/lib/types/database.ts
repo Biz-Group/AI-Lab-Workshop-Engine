@@ -167,6 +167,8 @@ export interface ModuleStep {
   estimated_minutes: number | null;
   is_required: boolean;
   show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
   created_at: string;
@@ -181,6 +183,8 @@ export interface ModuleStepInsert {
   estimated_minutes?: number | null;
   is_required?: boolean;
   show_response_field?: boolean;
+  is_gallery_step?: boolean;
+  reference_image_url?: string | null;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
 }
@@ -295,6 +299,8 @@ export interface SessionSnapshotStep {
   estimated_minutes: number | null;
   is_required: boolean;
   show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   ai_tool_name: string;
   ai_tool_url: string;
   created_at: string;
@@ -358,6 +364,8 @@ export interface Submission {
   step_id: string;
   content: string;
   image_url: string | null;
+  /** Facilitator moderation: excluded from the projected gallery wall. */
+  hidden_from_wall: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -457,6 +465,9 @@ export interface LibraryActivityStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
   created_at: string;
@@ -470,6 +481,9 @@ export interface LibraryActivityStepInsert {
   order_index: number;
   estimated_minutes?: number | null;
   is_required?: boolean;
+  show_response_field?: boolean;
+  is_gallery_step?: boolean;
+  reference_image_url?: string | null;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
 }

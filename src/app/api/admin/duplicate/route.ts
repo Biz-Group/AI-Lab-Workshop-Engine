@@ -36,6 +36,9 @@ interface DuplicateStepRow {
   instruction_markdown: string;
   estimated_minutes: number | null;
   is_required: boolean;
+  show_response_field: boolean;
+  is_gallery_step: boolean;
+  reference_image_url: string | null;
   order_index: number;
   ai_tool_name: string | null;
   ai_tool_url: string | null;
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
           modules(
             title, objective, order_index,
             steps:module_steps(
-              title, instruction_markdown, estimated_minutes, is_required, order_index, ai_tool_name, ai_tool_url,
+              title, instruction_markdown, estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, order_index, ai_tool_name, ai_tool_url,
               prompt_blocks(title, content_markdown, is_copyable, order_index)
             )
           )
@@ -154,6 +157,9 @@ export async function POST(request: NextRequest) {
               instruction_markdown: step.instruction_markdown,
               estimated_minutes: step.estimated_minutes,
               is_required: step.is_required,
+              show_response_field: step.show_response_field ?? true,
+              is_gallery_step: step.is_gallery_step ?? false,
+              reference_image_url: step.reference_image_url ?? null,
               order_index: step.order_index,
               ai_tool_name: step.ai_tool_name,
               ai_tool_url: step.ai_tool_url,
@@ -190,7 +196,7 @@ export async function POST(request: NextRequest) {
           title, objective, order_index, template_id,
           template:workshop_templates!inner(organization_id),
           steps:module_steps(
-            title, instruction_markdown, estimated_minutes, is_required, order_index, ai_tool_name, ai_tool_url,
+            title, instruction_markdown, estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, order_index, ai_tool_name, ai_tool_url,
             prompt_blocks(title, content_markdown, is_copyable, order_index)
           )
         `)
@@ -235,11 +241,14 @@ export async function POST(request: NextRequest) {
             instruction_markdown: step.instruction_markdown,
             estimated_minutes: step.estimated_minutes,
             is_required: step.is_required,
+            show_response_field: step.show_response_field ?? true,
+            is_gallery_step: step.is_gallery_step ?? false,
+            reference_image_url: step.reference_image_url ?? null,
             order_index: step.order_index,
             ai_tool_name: step.ai_tool_name,
             ai_tool_url: step.ai_tool_url,
           })
-          .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required, ai_tool_name, ai_tool_url')
+          .select('id, title, order_index, instruction_markdown, estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, ai_tool_name, ai_tool_url')
           .single();
 
         if (!newStep) continue;
@@ -272,7 +281,7 @@ export async function POST(request: NextRequest) {
       const { data: step } = await serviceClient
         .from('module_steps')
         .select(`
-          title, instruction_markdown, estimated_minutes, is_required, order_index, ai_tool_name, ai_tool_url,
+          title, instruction_markdown, estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, order_index, ai_tool_name, ai_tool_url,
           module:modules!inner(template:workshop_templates!inner(organization_id)),
           prompt_blocks(title, content_markdown, is_copyable, order_index)
         `)

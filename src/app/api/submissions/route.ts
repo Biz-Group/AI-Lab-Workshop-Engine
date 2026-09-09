@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         .single(),
       supabase
         .from('session_snapshot_steps')
-        .select('id')
+        .select('id, is_gallery_step')
         .eq('id', validatedData.stepId)
         .eq('session_id', validatedData.sessionId)
         .single(),
@@ -58,6 +58,16 @@ export async function POST(request: NextRequest) {
     if (!stepResult.data) {
       return NextResponse.json(
         { success: false, error: 'Step not found in session' },
+        { status: 400 }
+      );
+    }
+
+    // A gallery step exists to put an image on the shared screen, so the base
+    // schema's "text OR image" rule is not enough here. The Zod refine cannot
+    // express this because it does not know the step's type.
+    if (stepResult.data.is_gallery_step && !validatedData.imageUrl) {
+      return NextResponse.json(
+        { success: false, error: 'This activity requires an image' },
         { status: 400 }
       );
     }
