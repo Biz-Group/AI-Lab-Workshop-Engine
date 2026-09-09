@@ -44,63 +44,112 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ─── Layout ─────────────────────────────────────────────────────────────────
 //
-// CSS Grid, deliberately not the `columns` masonry the admin gallery uses:
-// column balancing re-flows every existing card when one arrives, so the whole
-// board visibly jumps each time somebody submits -- the opposite of a calm
-// reveal. Grid also makes overflow measurable by height rather than spilling
-// sideways.
+// Pinterest-style masonry: each tile's height follows its own image's aspect
+// ratio (capped so one extreme image can't dominate the wall), columns are a
+// pure function of measured width (never of image count), and every column is
+// its own independent top-to-bottom stack. That last part is what avoids the
+// classic "column balancing re-flows every existing card when one arrives"
+// masonry problem: `planMasonryPages` is always fed images oldest-first
+// (`chronologicalImages`), so a later arrival is only ever appended to
+// whichever column is currently shortest -- it can never change where an
+// earlier image already landed. Pagination still exists (a column-height
+// budget takes the place of the old fixed cols*rows capacity), so overflow
+// stays measurable rather than spilling into a scrollbar the room can't use.
 
-/** Below this a projected tile stops being legible from the back of a room. */
-const MIN_TILE_WIDTH_PX = 210;
-const MIN_TILE_HEIGHT_PX = 160;
-const GRID_GAP_PX = 16;
+/** Target column width -- narrow enough for several columns on a 16:9
+ * projector, wide enough to stay legible from the back of a room. */
+const MASONRY_COLUMN_TARGET_PX = 260;
+const MASONRY_GAP_PX = 16;
+const MASONRY_MAX_COLUMNS = 6;
+/** Estimated footer height (caption + name strip) folded into the pagination
+ * budget so a caption-heavy page doesn't overflow the stage even though the
+ * image itself is only ever sized to its own aspect ratio, never the footer. */
+const MASONRY_FOOTER_RESERVE_PX = 60;
 
-/** Column counts tuned for a 16:9 projector. */
-const COLUMN_LADDER: Array<{ upTo: number; cols: number }> = [
-  { upTo: 1, cols: 1 },
-  { upTo: 2, cols: 2 },
-  { upTo: 4, cols: 2 },
-  { upTo: 6, cols: 3 },
-  { upTo: 9, cols: 3 },
-  { upTo: 12, cols: 4 },
-  { upTo: 16, cols: 4 },
-  { upTo: 20, cols: 5 },
-  { upTo: 30, cols: 6 },
-];
-
-function laddderColumns(count: number): number {
-  for (const rung of COLUMN_LADDER) {
-    if (count <= rung.upTo) return rung.cols;
-  }
-  return COLUMN_LADDER[COLUMN_LADDER.length - 1].cols;
-}
-
-interface GridPlan {
-  cols: number;
-  /** How many tiles fit on one screen without breaching the minimum size. */
-  capacity: number;
+function computeMasonryColumns(width: number): number {
+  if (width <= 0) return 1;
+  return Math.max(
+    1,
+    Math.min(
+      MASONRY_MAX_COLUMNS,
+      Math.floor((width + MASONRY_GAP_PX) / (MASONRY_COLUMN_TARGET_PX + MASONRY_GAP_PX))
+    )
+  );
 }
 
 /**
- * Chooses a column count and a page capacity from the measured grid area.
- *
- * The binding rule is the minimum tile size: rather than shrinking tiles
- * indefinitely as submissions accumulate, the wall stops densifying and
- * paginates.
+ * No single tile may dominate the wall vertically, whatever its aspect ratio
+ * -- but the cap is deliberately generous: a normal photo (portrait,
+ * landscape, or square) should never actually hit it and letterbox. It only
+ * exists to catch a genuinely pathological upload (e.g. a screenshot scrolled
+ * to be several times taller than it is wide).
  */
-function planGrid(width: number, height: number, count: number): GridPlan {
-  if (width <= 0 || height <= 0) {
-    return { cols: laddderColumns(count), capacity: Math.max(count, 1) };
-  }
+function computeMasonryMaxTileHeight(stageHeight: number): number {
+  if (stageHeight <= 0) return 480;
+  return Math.max(240, Math.min(stageHeight * 0.85, 760));
+}
 
-  const maxCols = Math.max(1, Math.floor((width + GRID_GAP_PX) / (MIN_TILE_WIDTH_PX + GRID_GAP_PX)));
-  const maxRows = Math.max(1, Math.floor((height + GRID_GAP_PX) / (MIN_TILE_HEIGHT_PX + GRID_GAP_PX)));
-  const capacity = maxCols * maxRows;
+interface MasonryPlacement {
+  image: SessionSubmissionImage;
+  /** Height of the `<img>` itself -- never includes the footer, which is left
+   * to size itself naturally below it. */
+  imageHeight: number;
+  /** Stable order of placement, independent of pagination -- drives the
+   * reveal stagger. */
+  order: number;
+}
 
-  const onThisPage = Math.min(count, capacity);
-  const cols = Math.min(laddderColumns(onThisPage), maxCols);
+interface MasonryPage {
+  columns: MasonryPlacement[][];
+}
 
-  return { cols, capacity };
+/**
+ * Greedily assigns each image (processed oldest-first) to whichever column is
+ * currently shortest, cutting a new page once that would overflow the stage.
+ */
+function planMasonryPages(
+  images: SessionSubmissionImage[],
+  cols: number,
+  columnWidth: number,
+  maxTileHeight: number,
+  maxStageHeight: number,
+  hasFooter: (image: SessionSubmissionImage) => boolean,
+  getAspectRatio: (imageId: string) => number
+): MasonryPage[] {
+  const emptyPage = (): MasonryPage => ({ columns: Array.from({ length: cols }, () => []) });
+
+  if (images.length === 0) return [emptyPage()];
+
+  const pages: MasonryPage[] = [];
+  let page = emptyPage();
+  let columnHeights = new Array(cols).fill(0);
+
+  images.forEach((image, index) => {
+    const aspect = getAspectRatio(image.id) || 1;
+    const imageHeight = Math.min(columnWidth / aspect, maxTileHeight);
+    const totalHeight = imageHeight + (hasFooter(image) ? MASONRY_FOOTER_RESERVE_PX : 0);
+
+    let shortest = 0;
+    for (let i = 1; i < cols; i++) {
+      if (columnHeights[i] < columnHeights[shortest]) shortest = i;
+    }
+
+    const isColumnEmpty = page.columns[shortest].length === 0;
+    const projected = columnHeights[shortest] + totalHeight + (isColumnEmpty ? 0 : MASONRY_GAP_PX);
+
+    if (projected > maxStageHeight && !isColumnEmpty) {
+      pages.push(page);
+      page = emptyPage();
+      columnHeights = new Array(cols).fill(0);
+      shortest = 0;
+    }
+
+    page.columns[shortest].push({ image, imageHeight, order: index });
+    columnHeights[shortest] += totalHeight + (page.columns[shortest].length > 1 ? MASONRY_GAP_PX : 0);
+  });
+
+  pages.push(page);
+  return pages;
 }
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -184,6 +233,50 @@ export function ProjectionWall({
   const visibleImages = useMemo(
     () => images.filter((image) => !image.hidden_from_wall),
     [images]
+  );
+
+  // ─── Aspect ratios ────────────────────────────────────────────────────────
+  //
+  // Masonry needs each image's natural aspect ratio before it can size a
+  // tile. Nothing in the DB carries width/height, so it's discovered here by
+  // loading each image once; the ref is the cache (like useSessionSubmissions'
+  // own nameCacheRef), the state version is only there to trigger a re-render
+  // once new ratios resolve. Chronological order (`chronologicalImages` below)
+  // is what actually keeps the masonry column assignment stable -- this cache
+  // just needs a value per image, present or fallback, whenever it's read.
+  const aspectRatioCacheRef = useRef<Map<string, number>>(new Map());
+  const [aspectRatioVersion, setAspectRatioVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const missing = visibleImages.filter((image) => !aspectRatioCacheRef.current.has(image.id));
+    if (missing.length === 0) return;
+
+    missing.forEach((image) => {
+      const probe = new window.Image();
+      const resolve = (ratio: number) => {
+        if (cancelled) return;
+        aspectRatioCacheRef.current.set(image.id, ratio);
+        setAspectRatioVersion((v) => v + 1);
+      };
+      probe.onload = () => {
+        resolve(probe.naturalWidth > 0 && probe.naturalHeight > 0 ? probe.naturalWidth / probe.naturalHeight : 1);
+      };
+      probe.onerror = () => resolve(1);
+      probe.src = image.display_image_url;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleImages]);
+
+  const chronologicalImages = useMemo(
+    () =>
+      [...visibleImages].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      ),
+    [visibleImages]
   );
 
   const submittedCount = submittedParticipantIds.size;
@@ -384,11 +477,40 @@ export function ProjectionWall({
     };
   }, [isFullscreen]);
 
-  const { cols, capacity } = planGrid(gridArea.width, gridArea.height, visibleImages.length);
-  const pageCount = Math.max(1, Math.ceil(visibleImages.length / capacity));
+  const masonryCols = computeMasonryColumns(gridArea.width);
+  const masonryColumnWidth =
+    gridArea.width > 0
+      ? (gridArea.width - MASONRY_GAP_PX * (masonryCols - 1)) / masonryCols
+      : 0;
+  const masonryMaxTileHeight = computeMasonryMaxTileHeight(gridArea.height);
+
+  const masonryHasFooter = useCallback(
+    (image: SessionSubmissionImage) => (showCaptions && Boolean(image.content)) || showNames,
+    [showCaptions, showNames]
+  );
+
+  const masonryPages = useMemo(
+    () =>
+      planMasonryPages(
+        chronologicalImages,
+        masonryCols,
+        masonryColumnWidth,
+        masonryMaxTileHeight,
+        gridArea.height,
+        masonryHasFooter,
+        (imageId) => aspectRatioCacheRef.current.get(imageId) ?? 1
+      ),
+    // aspectRatioVersion is read only inside the getAspectRatio callback, not
+    // destructured here, so it has to be listed explicitly to trigger a
+    // recompute once a probed image's real ratio resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chronologicalImages, masonryCols, masonryColumnWidth, masonryMaxTileHeight, gridArea.height, masonryHasFooter, aspectRatioVersion]
+  );
+
+  const pageCount = masonryPages.length;
   const safePage = Math.min(page, pageCount - 1);
-  const pageImages = visibleImages.slice(safePage * capacity, safePage * capacity + capacity);
-  const rows = Math.max(1, Math.ceil(pageImages.length / cols));
+  const currentPage = masonryPages[safePage] ?? masonryPages[0];
+  const hasAnyImages = chronologicalImages.length > 0;
 
   // ─── Controls auto-fade ───────────────────────────────────────────────────
 
@@ -590,7 +712,7 @@ export function ProjectionWall({
             isLoading={isLoading}
             referenceImageUrl={currentStep?.referenceImageUrl ?? null}
           />
-        ) : pageImages.length === 0 ? (
+        ) : !hasAnyImages ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <Sparkles className="h-10 w-10 text-white/25" />
             <p className="text-2xl font-medium text-white/60">
@@ -598,28 +720,30 @@ export function ProjectionWall({
             </p>
           </div>
         ) : (
-          <div
-            className="grid h-full w-full content-stretch"
-            style={{
-              gap: GRID_GAP_PX,
-              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-            }}
-          >
-            {pageImages.map((image, index) => {
-              const inRevealBatch = revealBatch?.has(image.id) ?? false;
-              return (
-                <WallTile
-                  key={image.id}
-                  image={image}
-                  showNames={showNames}
-                  showCaptions={showCaptions}
-                  animationClass={inRevealBatch ? 'wall-reveal-enter' : 'wall-tile-enter'}
-                  animationDelayMs={inRevealBatch ? Math.min(index * 45, 600) : 0}
-                  onClick={() => setSpotlightId(image.id)}
-                />
-              );
-            })}
+          <div className="flex h-full w-full items-start" style={{ gap: MASONRY_GAP_PX }}>
+            {currentPage.columns.map((column, colIndex) => (
+              <div
+                key={colIndex}
+                className="flex min-w-0 flex-1 flex-col"
+                style={{ gap: MASONRY_GAP_PX }}
+              >
+                {column.map((placement) => {
+                  const inRevealBatch = revealBatch?.has(placement.image.id) ?? false;
+                  return (
+                    <WallTile
+                      key={placement.image.id}
+                      image={placement.image}
+                      imageHeight={placement.imageHeight}
+                      showNames={showNames}
+                      showCaptions={showCaptions}
+                      animationClass={inRevealBatch ? 'wall-reveal-enter' : 'wall-tile-enter'}
+                      animationDelayMs={inRevealBatch ? Math.min(placement.order * 45, 600) : 0}
+                      onClick={() => setSpotlightId(placement.image.id)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -874,6 +998,7 @@ function CollectionState({
 
 function WallTile({
   image,
+  imageHeight,
   showNames,
   showCaptions,
   animationClass,
@@ -881,6 +1006,9 @@ function WallTile({
   onClick,
 }: {
   image: SessionSubmissionImage;
+  /** Height of just the `<img>`, computed from its own aspect ratio by
+   * `planMasonryPages` -- the footer below sizes itself naturally. */
+  imageHeight: number;
   showNames: boolean;
   showCaptions: boolean;
   animationClass: string;
@@ -894,20 +1022,22 @@ function WallTile({
       type="button"
       onClick={onClick}
       className={cn(
-        'wall-tile group flex flex-col outline outline-1 outline-white/10 hover:outline-white/40',
+        'wall-tile group flex w-full flex-col outline outline-1 outline-white/10 hover:outline-white/40',
         animationClass
       )}
       style={animationDelayMs ? { animationDelay: `${animationDelayMs}ms` } : undefined}
     >
-      {/* contain, not cover: the whole submission is visible directly on the
-          wall, matching the spotlight below. Letterboxed margins are filled by
-          the tile's own translucent background (.wall-tile in globals.css) and
-          clipped to its rounded corners, so a mismatched-aspect image still
-          reads as a clean card, not a hole in the grid. */}
+      {/* Masonry: the tile's height comes straight from the image's own
+          aspect ratio at this column's width, so at that size it fills the
+          box exactly -- no crop, no letterbox. object-contain only matters
+          for the rare image extreme enough to hit planMasonryPages' height
+          cap, where it still avoids cropping rather than trimming the image
+          to fit. */}
       <img
         src={image.display_image_url}
         alt={showNames ? `Submission by ${image.participant_name}` : 'Submission'}
-        className="min-h-0 w-full flex-1 object-contain"
+        className="w-full shrink-0 object-contain"
+        style={{ height: imageHeight }}
       />
       {hasFooter && (
         <div className="w-full shrink-0 bg-black/45 px-3 py-2 text-left">
