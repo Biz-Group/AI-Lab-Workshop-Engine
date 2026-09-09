@@ -55,7 +55,8 @@ export default async function PresenterPage({ params }: PageProps) {
           title,
           order_index,
           estimated_minutes,
-          is_required
+          is_required,
+          reference_image_url
         )
       `)
       .eq('session_id', sessionId)

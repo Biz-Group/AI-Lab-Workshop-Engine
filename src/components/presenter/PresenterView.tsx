@@ -59,6 +59,7 @@ interface Step {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  reference_image_url?: string | null;
 }
 
 interface PresenterViewProps {
@@ -90,6 +91,7 @@ interface PreviewStep {
   order_index: number;
   estimated_minutes: number | null;
   is_required: boolean;
+  reference_image_url?: string | null;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
   prompt_blocks: PreviewPromptBlock[];
@@ -882,6 +884,19 @@ export function PresenterView({
                     {currentStep.estimated_minutes} minutes
                   </p>
                 )}
+                {currentStep?.reference_image_url && (
+                  <div className="mt-4 inline-flex flex-col items-center gap-1.5">
+                    <span className="text-xs uppercase tracking-wide text-gray-500">
+                      Target image
+                    </span>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage URL, not a local asset */}
+                    <img
+                      src={currentStep.reference_image_url}
+                      alt="Target reference for this gallery step"
+                      className="h-24 w-24 rounded-lg border border-gray-700 bg-gray-800 object-cover"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Step List */}
@@ -980,7 +995,7 @@ export function PresenterView({
                       id, title, objective, order_index,
                       steps:session_snapshot_steps(
                         id, title, instruction_markdown, order_index,
-                        estimated_minutes, is_required, show_response_field, is_gallery_step, ai_tool_name, ai_tool_url,
+                        estimated_minutes, is_required, show_response_field, is_gallery_step, reference_image_url, ai_tool_name, ai_tool_url,
                         prompt_blocks:session_snapshot_prompt_blocks(
                           id, title, content_markdown, is_copyable, order_index
                         )

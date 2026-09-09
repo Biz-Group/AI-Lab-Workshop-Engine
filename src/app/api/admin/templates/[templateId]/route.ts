@@ -104,7 +104,9 @@ export async function GET(
             ?.sort((a, b) => a.order_index - b.order_index)
             .map(s => ({
               ...s,
-              prompt_blocks: s.prompt_blocks?.sort((a, b) => a.order_index - b.order_index),
+              prompt_blocks: s.prompt_blocks?.sort(
+                (a: { order_index: number }, b: { order_index: number }) => a.order_index - b.order_index
+              ),
             })),
         })),
     };

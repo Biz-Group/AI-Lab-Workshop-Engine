@@ -1,5 +1,11 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+// The gallery-step reference image is a Supabase Storage URL surfaced only in
+// this facilitator-facing preview (see the placeholder card below), so a
+// plain <img> is fine -- same call GalleryStepSubmission.tsx and
+// ProjectionWall.tsx make for the equivalent participant/wall previews.
+
 import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -34,6 +40,7 @@ interface Step {
   is_required: boolean;
   show_response_field?: boolean;
   is_gallery_step?: boolean;
+  reference_image_url?: string | null;
   order_index: number;
   ai_tool_name?: string | null;
   ai_tool_url?: string | null;
@@ -400,6 +407,19 @@ export function TemplatePreview({ templateName, modules, aiToolName = 'ChatGPT',
                   <h3 className="text-lg font-semibold text-gray-900 leading-snug">
                     {parsedInstructions.objective || currentStep.title}
                   </h3>
+                  {currentStep.reference_image_url && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <img
+                        src={currentStep.reference_image_url}
+                        alt="Target reference"
+                        className="h-20 w-20 shrink-0 rounded-md border border-amber-200 bg-white object-cover"
+                      />
+                      <p className="text-xs text-amber-800">
+                        Facilitator only -- this target image is projected on the gallery wall
+                        and shown on the presenter console. Participants never see it here.
+                      </p>
+                    </div>
+                  )}
                   <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-gray-400 text-sm">
                     Participants drop, paste or choose an image plus an optional caption.
                     Instructions, prompt blocks and the AI tool button are hidden -- the

@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useCallback, useMemo, useId, useEffect } from 'react';
+/* eslint-disable @next/next/no-img-element */
+// Reference image thumbnails point at a Supabase Storage URL (see
+// ReferenceImageUploader below), so next/image's optimizer would gain
+// nothing here -- same call GalleryStepSubmission.tsx and ProjectionWall.tsx
+// already made for participant/wall image previews.
+
+import { useState, useRef, useCallback, useMemo, useId, useEffect } from 'react';
 import {
   Save,
   Pencil,
@@ -23,6 +29,9 @@ import {
   Search,
   ChevronsUpDown,
   ArrowRightLeft,
+  ImagePlus,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, Button, Input, TextArea, Modal, ConfirmModal } from '@/components/ui';
 import { TemplatePreview } from './TemplatePreview';
@@ -1787,10 +1796,128 @@ function PromptBlockRow({ block, moduleId, stepId, dragHandleProps, onBlockAdded
   );
 }
 
+// ─── Reference Image Uploader (gallery steps only) ──────────────────────
+//
+// A simple admin-side counterpart to GalleryStepSubmission.tsx's upload
+// surface: no caption, no drag-drop, just a file picker that uploads
+// immediately and hands the resulting public URL back to the caller's form
+// state. The image itself is never shown to participants -- only on the
+// presenter console and projected wall (see 029_step_reference_image.sql).
+const REFERENCE_IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
+const REFERENCE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+function ReferenceImageUploader({
+  templateId,
+  imageUrl,
+  onChange,
+}: {
+  templateId: string;
+  imageUrl: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose a PNG, JPG, GIF or WebP image.');
+      return;
+    }
+    if (file.size > REFERENCE_IMAGE_MAX_BYTES) {
+      toast.error('That image is over 5MB. Please choose a smaller file.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('templateId', templateId);
+
+      const res = await fetch('/api/admin/steps/reference-image/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Upload failed');
+      onChange(data.imageUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 pl-6">
+      <p className="text-xs font-medium text-gray-700 mb-1">Reference / target image (optional)</p>
+      <p className="text-xs text-gray-500 mb-2">
+        Shown to the facilitator on the presenter console and projected wall -- never on a
+        participant&rsquo;s own screen. Useful for &ldquo;replicate this image&rdquo; activities.
+      </p>
+      <div className="flex items-center gap-3">
+        {imageUrl ? (
+          <div className="relative shrink-0">
+            <img
+              src={imageUrl}
+              alt="Reference"
+              className="h-16 w-16 rounded-lg border border-gray-200 bg-gray-50 object-cover"
+            />
+            {!isUploading && (
+              <button
+                type="button"
+                aria-label="Remove reference image"
+                onClick={() => onChange(null)}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-gray-900 p-1 text-white shadow transition-colors hover:bg-gray-700"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400">
+            <ImagePlus className="w-5 h-5" />
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={isUploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {isUploading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              Uploading...
+            </>
+          ) : imageUrl ? (
+            'Replace image'
+          ) : (
+            'Choose image'
+          )}
+        </Button>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={REFERENCE_IMAGE_ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleFile(file);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
+
 // ─── Add Step Button ────────────────────────────────────────────────────
-function AddStepButton({ moduleId, onAdded }: {
+function AddStepButton({ moduleId, templateId, onAdded }: {
   moduleId: string;
-  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; is_gallery_step: boolean; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
+  templateId: string;
+  onAdded: (newStep: { id: string; title: string; order_index: number; instruction_markdown: string; estimated_minutes: number | null; is_required: boolean; is_gallery_step: boolean; reference_image_url: string | null; ai_tool_name: string | null; ai_tool_url: string | null }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -1798,6 +1925,7 @@ function AddStepButton({ moduleId, onAdded }: {
   const [estimatedMinutes, setEstimatedMinutes] = useState(5);
   const [isRequired, setIsRequired] = useState(false);
   const [isGalleryStep, setIsGalleryStep] = useState(false);
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [aiToolName, setAiToolName] = useState('');
   const [aiToolUrl, setAiToolUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -1816,6 +1944,7 @@ function AddStepButton({ moduleId, onAdded }: {
           estimated_minutes: estimatedMinutes,
           is_required: isRequired,
           is_gallery_step: isGalleryStep,
+          reference_image_url: referenceImageUrl,
           ai_tool_name: aiToolName.trim() || null,
           ai_tool_url: aiToolUrl.trim() || null,
         }),
@@ -1831,6 +1960,7 @@ function AddStepButton({ moduleId, onAdded }: {
         estimated_minutes: estimatedMinutes,
         is_required: isRequired,
         is_gallery_step: isGalleryStep,
+        reference_image_url: referenceImageUrl,
         ai_tool_name: aiToolName.trim() || null,
         ai_tool_url: aiToolUrl.trim() || null,
       });
@@ -1839,6 +1969,7 @@ function AddStepButton({ moduleId, onAdded }: {
       setEstimatedMinutes(5);
       setIsRequired(false);
       setIsGalleryStep(false);
+      setReferenceImageUrl(null);
       setAiToolName('');
       setAiToolUrl('');
       setIsOpen(false);
@@ -1861,7 +1992,7 @@ function AddStepButton({ moduleId, onAdded }: {
         <span className="text-xs font-medium text-gray-500 group-hover:text-brand-700 transition-colors">Add Step</span>
         <Plus className="w-3 h-3 ml-auto text-gray-400 group-hover:text-brand-600 transition-colors" />
       </button>
-      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setAiToolName(''); setAiToolUrl(''); }} title="Add Step">
+      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setReferenceImageUrl(null); setAiToolName(''); setAiToolUrl(''); }} title="Add Step">
         <div className="space-y-4">
           <Input
             label="Step Title"
@@ -1910,6 +2041,13 @@ function AddStepButton({ moduleId, onAdded }: {
                 </span>
               </span>
             </label>
+            {isGalleryStep && (
+              <ReferenceImageUploader
+                templateId={templateId}
+                imageUrl={referenceImageUrl}
+                onChange={setReferenceImageUrl}
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -1926,7 +2064,7 @@ function AddStepButton({ moduleId, onAdded }: {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setAiToolName(''); setAiToolUrl(''); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setIsOpen(false); setTitle(''); setInstructionMarkdown(''); setEstimatedMinutes(5); setIsRequired(false); setIsGalleryStep(false); setReferenceImageUrl(null); setAiToolName(''); setAiToolUrl(''); }}>Cancel</Button>
             <Button onClick={handleAdd} disabled={!title.trim() || isSaving}>
               {isSaving ? 'Adding...' : 'Add Step'}
             </Button>
