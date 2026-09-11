@@ -11,6 +11,11 @@ const submissionSchema = z.object({
   stepId: z.string().uuid(),
   content: z.string().max(10000).optional().default(''),
   imageUrl: z.string().url().max(2000).optional().nullable(),
+  // Only ever sent alongside a fresh image upload (see GalleryStepSubmission
+  // handleSubmit) -- a caption-only edit omits both, and the upsert below
+  // must leave whatever dimensions are already stored untouched in that case.
+  imageWidth: z.number().int().positive().max(20000).optional(),
+  imageHeight: z.number().int().positive().max(20000).optional(),
 }).refine(
   (data) => data.content.trim().length > 0 || (data.imageUrl != null && data.imageUrl.length > 0),
   { message: 'Either text content or an image is required' }
@@ -92,6 +97,11 @@ export async function POST(request: NextRequest) {
           content: validatedData.content,
           image_url: validatedData.imageUrl ?? null,
           updated_at: new Date().toISOString(),
+          // Omitted (not set to null) on a caption-only edit, so the upsert's
+          // generated SET clause never touches these columns and whatever was
+          // captured at the original upload survives.
+          ...(validatedData.imageWidth !== undefined && { image_width: validatedData.imageWidth }),
+          ...(validatedData.imageHeight !== undefined && { image_height: validatedData.imageHeight }),
         },
         {
           onConflict: 'participant_id,step_id',

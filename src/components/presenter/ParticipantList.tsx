@@ -112,11 +112,41 @@ export const ParticipantList = memo(function ParticipantList({
     setIsLoading(false);
   }, [sessionId]);
 
-  // Initial fetch + infrequent fallback refresh (realtime handles fast updates)
+  // Initial fetch + infrequent fallback refresh (realtime handles fast updates).
+  // Paused while backgrounded, same as the wall's reconcile poll -- this
+  // panel is left open in the facilitator console for the whole session.
   useEffect(() => {
     fetchParticipants();
-    const interval = setInterval(fetchParticipants, 30000);
-    return () => clearInterval(interval);
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(fetchParticipants, 30000);
+    };
+
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stop();
+      } else {
+        fetchParticipants();
+        start();
+      }
+    };
+
+    if (document.visibilityState !== 'hidden') start();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stop();
+    };
   }, [fetchParticipants]);
 
   // Subscribe to new participants

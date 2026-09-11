@@ -42,6 +42,13 @@ export interface SessionSubmissionImage {
   hidden_from_wall: boolean;
   created_at: string;
   updated_at: string;
+  /**
+   * Natural pixel dimensions captured at upload time (image-upload.ts). Null
+   * for submissions made before that existed -- consumers should fall back
+   * to their own aspect-ratio discovery in that case.
+   */
+  image_width: number | null;
+  image_height: number | null;
 }
 
 export interface SessionSubmissionResponse {
@@ -101,6 +108,8 @@ interface SubmissionRow {
   hidden_from_wall: boolean | null;
   created_at: string;
   updated_at: string | null;
+  image_width: number | null;
+  image_height: number | null;
   participant?: unknown;
 }
 
@@ -113,6 +122,8 @@ const SELECT_COLUMNS = `
   hidden_from_wall,
   created_at,
   updated_at,
+  image_width,
+  image_height,
   participant:participants(display_name)
 `;
 
@@ -129,6 +140,8 @@ function toImage(row: SubmissionRow, name: string): SessionSubmissionImage | nul
     hidden_from_wall: row.hidden_from_wall === true,
     created_at: row.created_at,
     updated_at: row.updated_at || row.created_at,
+    image_width: row.image_width ?? null,
+    image_height: row.image_height ?? null,
   };
 }
 
@@ -325,12 +338,44 @@ export function useSessionSubmissions({
 
   // Reconcile poll. Also the sole delivery path when the table turns out not to
   // be in the realtime publication.
+  //
+  // Paused while the tab is backgrounded: a facilitator routinely leaves the
+  // wall or admin gallery open in an unfocused tab for an entire workshop, and
+  // an unattended tab polling every 5s all day is pure read load against
+  // Supabase's disk I/O budget for zero benefit -- nobody is looking at it.
+  // Refreshing once on refocus catches anything realtime missed while hidden.
   useEffect(() => {
-    const interval = setInterval(() => {
-      void refresh();
-    }, POLL_INTERVAL_MS);
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(interval);
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => {
+        void refresh();
+      }, POLL_INTERVAL_MS);
+    };
+
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stop();
+      } else {
+        void refresh();
+        start();
+      }
+    };
+
+    if (document.visibilityState !== 'hidden') start();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stop();
+    };
   }, [refresh]);
 
   const submittedParticipantIds = useMemo(() => {

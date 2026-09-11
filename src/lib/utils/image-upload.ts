@@ -79,6 +79,26 @@ export interface PreparedImage {
   /** True when the image was re-encoded, so the UI can say so. */
   wasCompressed: boolean;
   originalBytes: number;
+  /**
+   * Natural pixel dimensions of `file`. 0 if they couldn't be read (rare --
+   * a corrupt/unsupported image the browser still let through). The gallery
+   * wall persists these so it can size a masonry tile immediately instead of
+   * probing the uploaded image over the network after the fact.
+   */
+  width: number;
+  height: number;
+}
+
+/** Cheaper than a full `<img>` decode when there's no need to draw it. */
+async function readImageDimensions(blob: Blob): Promise<{ width: number; height: number } | null> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const dims = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return dims;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -96,7 +116,8 @@ export async function prepareImageForUpload(file: File): Promise<PreparedImage> 
   const originalBytes = file.size;
 
   if (file.size <= DOWNSCALE_TRIGGER_BYTES) {
-    return { file, wasCompressed: false, originalBytes };
+    const dims = await readImageDimensions(file);
+    return { file, wasCompressed: false, originalBytes, width: dims?.width ?? 0, height: dims?.height ?? 0 };
   }
 
   const img = await loadImage(file);
@@ -123,6 +144,8 @@ export async function prepareImageForUpload(file: File): Promise<PreparedImage> 
         file: new File([blob], `${name}.webp`, { type: 'image/webp' }),
         wasCompressed: true,
         originalBytes,
+        width: canvas.width,
+        height: canvas.height,
       };
     }
   }

@@ -177,10 +177,16 @@ export function GalleryStepSubmission({
 
     try {
       let imageUrl = existingSubmission?.image_url ?? null;
+      // Only set on a fresh upload -- a caption-only edit has no new file to
+      // measure, and must leave whatever dimensions are already stored alone.
+      let imageDimensions: { width: number; height: number } | null = null;
 
       if (file) {
         setPhase('uploading');
         const prepared = await prepareImageForUpload(file);
+        if (prepared.width > 0 && prepared.height > 0) {
+          imageDimensions = { width: prepared.width, height: prepared.height };
+        }
 
         const formData = new FormData();
         formData.append('file', prepared.file);
@@ -209,6 +215,8 @@ export function GalleryStepSubmission({
           stepId,
           content: caption.trim(),
           imageUrl,
+          imageWidth: imageDimensions?.width,
+          imageHeight: imageDimensions?.height,
         }),
       });
       const data = await res.json();

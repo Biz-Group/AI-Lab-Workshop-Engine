@@ -61,9 +61,10 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 const MASONRY_COLUMN_TARGET_PX = 260;
 const MASONRY_GAP_PX = 16;
 const MASONRY_MAX_COLUMNS = 6;
-/** Estimated footer height (caption + name strip) folded into the pagination
- * budget so a caption-heavy page doesn't overflow the stage even though the
- * image itself is only ever sized to its own aspect ratio, never the footer. */
+/** Estimated footer height (caption + name strip) folded into each column's
+ * running height so captioned tiles still balance evenly against
+ * uncaptioned ones, even though the image itself is only ever sized to its
+ * own aspect ratio, never the footer. */
 const MASONRY_FOOTER_RESERVE_PX = 60;
 
 function computeMasonryColumns(width: number): number {
@@ -99,33 +100,34 @@ interface MasonryPlacement {
   order: number;
 }
 
-interface MasonryPage {
-  columns: MasonryPlacement[][];
-}
-
 /**
- * Greedily assigns each image (processed oldest-first) to whichever column is
- * currently shortest, cutting a new page once that would overflow the stage.
+ * Greedily assigns every image (processed oldest-first) to whichever column
+ * is currently shortest, balancing total height across columns.
+ *
+ * There used to be a page-cutting step here: once a column's projected
+ * height passed the stage's, a new "page" started and the facilitator paged
+ * through with buttons. That interacted badly with the async aspect-ratio
+ * resolution below -- a page's worth of images was decided from
+ * still-resolving (fallback-square) heights, so a facilitator could land on
+ * a page that would gain or lose images entirely once real ratios arrived a
+ * moment later, visible as a page that looks empty or wrong. Letting the
+ * stage scroll instead removes the failure mode at the root: there is no
+ * "which page is this on" decision left to get transiently wrong. A late
+ * ratio arriving just reflows column heights in place.
  */
-function planMasonryPages(
+function planMasonryColumns(
   images: SessionSubmissionImage[],
   cols: number,
   columnWidth: number,
   maxTileHeight: number,
-  maxStageHeight: number,
   hasFooter: (image: SessionSubmissionImage) => boolean,
-  getAspectRatio: (imageId: string) => number
-): MasonryPage[] {
-  const emptyPage = (): MasonryPage => ({ columns: Array.from({ length: cols }, () => []) });
-
-  if (images.length === 0) return [emptyPage()];
-
-  const pages: MasonryPage[] = [];
-  let page = emptyPage();
-  let columnHeights = new Array(cols).fill(0);
+  getAspectRatio: (image: SessionSubmissionImage) => number
+): MasonryPlacement[][] {
+  const columns: MasonryPlacement[][] = Array.from({ length: cols }, () => []);
+  const columnHeights = new Array(cols).fill(0);
 
   images.forEach((image, index) => {
-    const aspect = getAspectRatio(image.id) || 1;
+    const aspect = getAspectRatio(image) || 1;
     const imageHeight = Math.min(columnWidth / aspect, maxTileHeight);
     const totalHeight = imageHeight + (hasFooter(image) ? MASONRY_FOOTER_RESERVE_PX : 0);
 
@@ -134,22 +136,11 @@ function planMasonryPages(
       if (columnHeights[i] < columnHeights[shortest]) shortest = i;
     }
 
-    const isColumnEmpty = page.columns[shortest].length === 0;
-    const projected = columnHeights[shortest] + totalHeight + (isColumnEmpty ? 0 : MASONRY_GAP_PX);
-
-    if (projected > maxStageHeight && !isColumnEmpty) {
-      pages.push(page);
-      page = emptyPage();
-      columnHeights = new Array(cols).fill(0);
-      shortest = 0;
-    }
-
-    page.columns[shortest].push({ image, imageHeight, order: index });
-    columnHeights[shortest] += totalHeight + (page.columns[shortest].length > 1 ? MASONRY_GAP_PX : 0);
+    columns[shortest].push({ image, imageHeight, order: index });
+    columnHeights[shortest] += totalHeight + (columns[shortest].length > 1 ? MASONRY_GAP_PX : 0);
   });
 
-  pages.push(page);
-  return pages;
+  return columns;
 }
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -205,7 +196,6 @@ export function ProjectionWall({
   const [revealedStepIds, setRevealedStepIds] = useState<Set<string>>(new Set());
   const [showNames, setShowNames] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [page, setPage] = useState(0);
   const [spotlightId, setSpotlightId] = useState<string | null>(null);
   const [isQrVisible, setIsQrVisible] = useState(false);
   const [isReferenceImageOpen, setIsReferenceImageOpen] = useState(false);
@@ -237,19 +227,33 @@ export function ProjectionWall({
 
   // ─── Aspect ratios ────────────────────────────────────────────────────────
   //
-  // Masonry needs each image's natural aspect ratio before it can size a
-  // tile. Nothing in the DB carries width/height, so it's discovered here by
-  // loading each image once; the ref is the cache (like useSessionSubmissions'
-  // own nameCacheRef), the state version is only there to trigger a re-render
-  // once new ratios resolve. Chronological order (`chronologicalImages` below)
-  // is what actually keeps the masonry column assignment stable -- this cache
-  // just needs a value per image, present or fallback, whenever it's read.
+  // Masonry needs each image's aspect ratio before it can size a tile.
+  // Submissions made after image-upload.ts started capturing width/height
+  // carry it already (image_width/image_height, set at upload time by the
+  // participant's own browser) -- read straight off the row, no network
+  // round trip. Only a submission from before that column existed falls back
+  // to the client-side probe below.
+  //
+  // That fallback exists at all because probing used to be the only path,
+  // and it has a real cost worth avoiding: loading every image with
+  // `new Image()` after reveal means, for a burst of many submissions, the
+  // probes queue behind the browser's per-host connection limit and take
+  // seconds to resolve. Pagination computed in the meantime uses a fallback
+  // square ratio for anything unresolved, then reflows (shifting which
+  // images land on which page) as each real ratio arrives -- a facilitator
+  // can land on a page that's transiently empty mid-resolution. Stored
+  // dimensions sidestep that race entirely for every submission going
+  // forward; the ref/version pair below is only still needed for the legacy
+  // rows that still need probing.
   const aspectRatioCacheRef = useRef<Map<string, number>>(new Map());
   const [aspectRatioVersion, setAspectRatioVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    const missing = visibleImages.filter((image) => !aspectRatioCacheRef.current.has(image.id));
+    const missing = visibleImages.filter(
+      (image) =>
+        !(image.image_width && image.image_height) && !aspectRatioCacheRef.current.has(image.id)
+    );
     if (missing.length === 0) return;
 
     missing.forEach((image) => {
@@ -271,6 +275,17 @@ export function ProjectionWall({
     };
   }, [visibleImages]);
 
+  /** Stored dimensions when present; the probe cache (or a square fallback) otherwise. */
+  const resolveAspectRatio = useCallback(
+    (image: SessionSubmissionImage): number => {
+      if (image.image_width && image.image_height) {
+        return image.image_width / image.image_height;
+      }
+      return aspectRatioCacheRef.current.get(image.id) ?? 1;
+    },
+    []
+  );
+
   const chronologicalImages = useMemo(
     () =>
       [...visibleImages].sort(
@@ -283,6 +298,11 @@ export function ProjectionWall({
 
   // ─── Step navigation ──────────────────────────────────────────────────────
 
+  /** The scroll-based equivalent of the old "reset to page 1" on activity change. */
+  const scrollStageToTop = useCallback(() => {
+    gridAreaRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
+
   const goToGalleryStep = useCallback(
     async (index: number) => {
       if (isNavigatingRef.current) return;
@@ -291,7 +311,7 @@ export function ProjectionWall({
 
       isNavigatingRef.current = true;
       setCurrentStepId(target.id);
-      setPage(0);
+      scrollStageToTop();
       setSpotlightId(null);
       setIsReferenceImageOpen(false);
 
@@ -320,7 +340,7 @@ export function ProjectionWall({
         isNavigatingRef.current = false;
       }
     },
-    [gallerySteps, currentStepId, session.id]
+    [gallerySteps, currentStepId, session.id, scrollStageToTop]
   );
 
   // ─── Auth keep-alive ──────────────────────────────────────────────────────
@@ -356,7 +376,7 @@ export function ProjectionWall({
         if (!isGallery) return;
 
         setCurrentStepId(parsed.current_step_id);
-        setPage(0);
+        scrollStageToTop();
         setSpotlightId(null);
         setIsReferenceImageOpen(false);
       })
@@ -369,7 +389,7 @@ export function ProjectionWall({
       supabase.removeChannel(channel);
       broadcastRef.current = null;
     };
-  }, [session.id, gallerySteps]);
+  }, [session.id, gallerySteps, scrollStageToTop]);
 
   // Reconcile poll: catches a console step change if the broadcast is missed,
   // and keeps the "of N" denominator fresh as latecomers join.
@@ -394,8 +414,39 @@ export function ProjectionWall({
       setCurrentStepId((prev) => (prev === remoteStepId ? prev : remoteStepId));
     };
 
-    const interval = setInterval(() => void reconcile(), STEP_RECONCILE_INTERVAL_MS);
-    return () => clearInterval(interval);
+    // Paused while backgrounded -- this tab is meant to stay open on a
+    // projector for a whole workshop, and an unattended tab querying every
+    // 10s all day is pure read load with nobody watching it. Reconcile once
+    // immediately on refocus to catch whatever realtime missed while hidden.
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => void reconcile(), STEP_RECONCILE_INTERVAL_MS);
+    };
+
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stop();
+      } else {
+        void reconcile();
+        start();
+      }
+    };
+
+    if (document.visibilityState !== 'hidden') start();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stop();
+    };
   }, [session.id, gallerySteps]);
 
   // ─── Reveal ───────────────────────────────────────────────────────────────
@@ -489,27 +540,25 @@ export function ProjectionWall({
     [showCaptions, showNames]
   );
 
-  const masonryPages = useMemo(
+  const masonryColumns = useMemo(
     () =>
-      planMasonryPages(
+      planMasonryColumns(
         chronologicalImages,
         masonryCols,
         masonryColumnWidth,
         masonryMaxTileHeight,
-        gridArea.height,
         masonryHasFooter,
-        (imageId) => aspectRatioCacheRef.current.get(imageId) ?? 1
+        resolveAspectRatio
       ),
-    // aspectRatioVersion is read only inside the getAspectRatio callback, not
-    // destructured here, so it has to be listed explicitly to trigger a
-    // recompute once a probed image's real ratio resolves.
+    // aspectRatioVersion isn't read directly here -- resolveAspectRatio reads
+    // the ref it bumps -- so it has to be listed explicitly to trigger a
+    // recompute once a legacy image's probed ratio resolves. Stored
+    // dimensions (the common case now) don't need this at all: they're read
+    // straight off `chronologicalImages`, already a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chronologicalImages, masonryCols, masonryColumnWidth, masonryMaxTileHeight, gridArea.height, masonryHasFooter, aspectRatioVersion]
+    [chronologicalImages, masonryCols, masonryColumnWidth, masonryMaxTileHeight, masonryHasFooter, resolveAspectRatio, aspectRatioVersion]
   );
 
-  const pageCount = masonryPages.length;
-  const safePage = Math.min(page, pageCount - 1);
-  const currentPage = masonryPages[safePage] ?? masonryPages[0];
   const hasAnyImages = chronologicalImages.length > 0;
 
   // ─── Controls auto-fade ───────────────────────────────────────────────────
@@ -567,14 +616,16 @@ export function ProjectionWall({
           event.preventDefault();
           void goToGalleryStep(currentIndex - 1);
           break;
-        // Paging is deliberately a different binding from step navigation.
+        // Scrolling is deliberately a different binding from step navigation.
+        // One "page" = one stage-height's worth, matching the pre-scroll
+        // pagination this replaced.
         case 'PageDown':
           event.preventDefault();
-          setPage((prev) => Math.min(prev + 1, pageCount - 1));
+          gridAreaRef.current?.scrollBy({ top: gridAreaRef.current.clientHeight * 0.9, behavior: 'smooth' });
           break;
         case 'PageUp':
           event.preventDefault();
-          setPage((prev) => Math.max(prev - 1, 0));
+          gridAreaRef.current?.scrollBy({ top: -gridAreaRef.current.clientHeight * 0.9, behavior: 'smooth' });
           break;
         case 'r':
           event.preventDefault();
@@ -605,7 +656,6 @@ export function ProjectionWall({
     goToGalleryStep,
     hideAgain,
     isRevealed,
-    pageCount,
     reveal,
     spotlightId,
     toggleFullscreen,
@@ -704,7 +754,10 @@ export function ProjectionWall({
       )}
 
       {/* Stage */}
-      <div ref={gridAreaRef} className="relative min-h-0 flex-1 px-10">
+      <div
+        ref={gridAreaRef}
+        className="wall-stage relative min-h-0 flex-1 overflow-y-auto px-10"
+      >
         {!isRevealed ? (
           <CollectionState
             submitted={submittedCount}
@@ -720,8 +773,8 @@ export function ProjectionWall({
             </p>
           </div>
         ) : (
-          <div className="flex h-full w-full items-start" style={{ gap: MASONRY_GAP_PX }}>
-            {currentPage.columns.map((column, colIndex) => (
+          <div className="flex min-h-full w-full items-start pb-4" style={{ gap: MASONRY_GAP_PX }}>
+            {masonryColumns.map((column, colIndex) => (
               <div
                 key={colIndex}
                 className="flex min-w-0 flex-1 flex-col"
@@ -811,32 +864,6 @@ export function ProjectionWall({
               <Shuffle className="mr-2 h-4 w-4" />
               Random
             </WallButton>
-          )}
-
-          {/* Page navigation is visually and technically separate from activity
-              navigation, and only appears when it applies. */}
-          {isRevealed && pageCount > 1 && (
-            <div className="flex items-center gap-1.5 rounded-full border border-white/15 px-2 py-1">
-              <WallButton
-                onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-                disabled={safePage === 0}
-                label="Previous page"
-                isBare
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </WallButton>
-              <span className="px-1 text-xs text-white/55">
-                Page {safePage + 1} of {pageCount}
-              </span>
-              <WallButton
-                onClick={() => setPage((prev) => Math.min(prev + 1, pageCount - 1))}
-                disabled={safePage >= pageCount - 1}
-                label="Next page"
-                isBare
-              >
-                <ChevronRight className="h-4 w-4" />
-              </WallButton>
-            </div>
           )}
 
           <WallButton
