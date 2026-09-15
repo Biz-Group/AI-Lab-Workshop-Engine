@@ -169,6 +169,13 @@ export function WorkshopRunner({
   // screen; see getStepLayout for the full rule.
   const stepLayout = getStepLayout(currentStep, isLastStep);
   const existingSubmission = submissions.find(s => s.step_id === currentStep?.id);
+  // Gallery steps allow more than one image per step, so GalleryStepSubmission
+  // gets every row for the current step, not just the (arbitrary) first one
+  // `existingSubmission` above resolves to.
+  const existingGallerySubmissions = useMemo(
+    () => submissions.filter(s => s.step_id === currentStep?.id),
+    [submissions, currentStep?.id]
+  );
   const hasEffectiveImage = !!imageFile || (!!existingSubmission?.image_url && !imageMarkedForRemoval);
   const canSubmit = submissionContent.trim().length > 0 || hasEffectiveImage;
   const parsedInstructions = useMemo(() => parseStepInstructions(currentStep?.instruction_markdown || ''), [currentStep?.instruction_markdown]);
@@ -384,6 +391,13 @@ export function WorkshopRunner({
         ? null
         : (existingSubmission?.image_url ?? null);
 
+      // This step's submission row, if one already exists -- reused on every
+      // resubmit so editing a response updates it in place instead of
+      // creating a new row each time (submissions no longer enforces at most
+      // one row per participant+step at the DB level; that guarantee is now
+      // this explicit submissionId instead, same as GalleryStepSubmission).
+      const submissionId = existingSubmission?.id;
+
       // Upload image first if a new file is selected
       if (imageFile) {
         setIsUploading(true);
@@ -392,6 +406,7 @@ export function WorkshopRunner({
         formData.append('participantId', participant.id);
         formData.append('sessionId', initialSession.id);
         formData.append('stepId', currentStep.id);
+        if (submissionId) formData.append('submissionId', submissionId);
 
         const uploadRes = await fetch('/api/submissions/upload', {
           method: 'POST',
@@ -416,6 +431,7 @@ export function WorkshopRunner({
           stepId: currentStep.id,
           content: submissionContent || '',
           imageUrl,
+          submissionId,
         }),
       });
 
@@ -677,12 +693,18 @@ export function WorkshopRunner({
                 participantId={participant.id}
                 stepId={currentStep.id}
                 prompt={parsedInstructions.objective || currentStep.title}
-                existingSubmission={existingSubmission}
+                existingSubmissions={existingGallerySubmissions}
                 onSubmitted={(submission) => {
+                  // Keyed by row id, not step -- a step can now hold several
+                  // images, so this must only replace the one row that
+                  // changed, not every row for the step.
                   setSubmissions(prev => [
-                    ...prev.filter(s => s.step_id !== submission.step_id),
+                    ...prev.filter(s => s.id !== submission.id),
                     submission,
                   ]);
+                }}
+                onDeleted={(submissionId) => {
+                  setSubmissions(prev => prev.filter(s => s.id !== submissionId));
                 }}
                 onLogEvent={logEvent}
               />

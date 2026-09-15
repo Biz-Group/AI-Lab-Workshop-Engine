@@ -3,7 +3,10 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GalleryStepSubmission } from '@/components/workshop/GalleryStepSubmission';
+import {
+  GalleryStepSubmission,
+  type GalleryStepSubmissionValue,
+} from '@/components/workshop/GalleryStepSubmission';
 
 vi.mock('react-hot-toast', () => ({
   default: { success: vi.fn(), error: vi.fn() },
@@ -12,11 +15,21 @@ vi.mock('react-hot-toast', () => ({
 const SESSION_ID = '11111111-1111-1111-1111-111111111111';
 const PARTICIPANT_ID = '22222222-2222-2222-2222-222222222222';
 const STEP_ID = '33333333-3333-3333-3333-333333333333';
-const EXISTING_IMAGE = 'https://example.test/storage/sess/part/step.png';
 
 function imageFile(name = 'ai-image.png') {
   // Small enough to skip the canvas downscale path, which jsdom cannot run.
   return new File([new Uint8Array([1, 2, 3, 4])], name, { type: 'image/png' });
+}
+
+function existingImage(overrides: Partial<GalleryStepSubmissionValue> = {}): GalleryStepSubmissionValue {
+  return {
+    id: 'sub-existing',
+    step_id: STEP_ID,
+    content: '',
+    image_url: 'https://example.test/storage/sess/part/step/existing.png',
+    updated_at: '2026-09-01T10:00:00.000Z',
+    ...overrides,
+  };
 }
 
 /** jsdom has no clipboardData on ClipboardEvent, so build the payload by hand. */
@@ -39,22 +52,67 @@ function renderComponent(
   overrides: Partial<React.ComponentProps<typeof GalleryStepSubmission>> = {}
 ) {
   const onSubmitted = vi.fn();
+  const onDeleted = vi.fn();
+  const { existingSubmissions = [], ...rest } = overrides;
   const result = render(
     <GalleryStepSubmission
       sessionId={SESSION_ID}
       participantId={PARTICIPANT_ID}
       stepId={STEP_ID}
       prompt="Generate an image of the workplace of 2030"
+      existingSubmissions={existingSubmissions}
       onSubmitted={onSubmitted}
-      {...overrides}
+      onDeleted={onDeleted}
+      {...rest}
     />
   );
-  return { ...result, onSubmitted };
+  return { ...result, onSubmitted, onDeleted };
 }
 
-function submissionCalls() {
-  const fetchMock = global.fetch as unknown as { mock: { calls: unknown[][] } };
-  return fetchMock.mock.calls.filter((call) => String(call[0]).endsWith('/api/submissions'));
+function fetchMockCalls() {
+  return (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+}
+
+function callsTo(pathSuffix: string, method?: string) {
+  return fetchMockCalls().filter((call) => {
+    const matchesUrl = String(call[0]).includes(pathSuffix);
+    const init = call[1] as RequestInit | undefined;
+    const matchesMethod = !method || (init?.method ?? 'GET') === method;
+    return matchesUrl && matchesMethod;
+  });
+}
+
+/** A well-behaved default mock: upload succeeds, save succeeds, delete succeeds. */
+function installDefaultFetchMock() {
+  global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+
+    if (url.includes('/api/submissions/upload')) {
+      return Promise.resolve({
+        json: async () => ({ success: true, imageUrl: 'https://example.test/uploaded.webp' }),
+      } as Response);
+    }
+
+    if (method === 'DELETE') {
+      return Promise.resolve({ json: async () => ({ success: true }) } as Response);
+    }
+
+    // POST /api/submissions (new image or caption edit)
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    return Promise.resolve({
+      json: async () => ({
+        success: true,
+        submission: {
+          id: body.submissionId ?? 'sub-new',
+          step_id: STEP_ID,
+          content: body.content ?? '',
+          image_url: body.imageUrl ?? 'https://example.test/uploaded.webp',
+          updated_at: new Date().toISOString(),
+        },
+      }),
+    } as Response);
+  }) as typeof fetch;
 }
 
 beforeEach(() => {
@@ -64,28 +122,7 @@ beforeEach(() => {
   global.URL.createObjectURL = vi.fn(() => `blob:preview-${++counter}`);
   global.URL.revokeObjectURL = vi.fn();
 
-  global.fetch = vi.fn((input: RequestInfo | URL) => {
-    const url = String(input);
-
-    if (url.includes('/api/submissions/upload')) {
-      return Promise.resolve({
-        json: async () => ({ success: true, imageUrl: 'https://example.test/uploaded.webp' }),
-      } as Response);
-    }
-
-    return Promise.resolve({
-      json: async () => ({
-        success: true,
-        submission: {
-          id: 'sub-1',
-          step_id: STEP_ID,
-          content: '',
-          image_url: 'https://example.test/uploaded.webp',
-          updated_at: new Date().toISOString(),
-        },
-      }),
-    } as Response);
-  }) as typeof fetch;
+  installDefaultFetchMock();
 });
 
 afterEach(() => {
@@ -93,37 +130,54 @@ afterEach(() => {
 });
 
 describe('GalleryStepSubmission input paths', () => {
-  it('accepts an image pasted from the clipboard', async () => {
-    const { container } = renderComponent();
+  it('accepts a pasted image, uploads it, and reports it to the parent', async () => {
+    const { container, onSubmitted } = renderComponent();
 
     firePaste(container.firstElementChild!, [
       { kind: 'file', type: 'image/png', file: imageFile() },
     ]);
 
-    expect(await screen.findByAltText('Selected image preview')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Submit to gallery/ })).toBeTruthy();
+    await waitFor(() => {
+      expect(onSubmitted).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmitted.mock.calls[0][0]).toMatchObject({ step_id: STEP_ID });
+    expect(callsTo('/api/submissions/upload')).toHaveLength(1);
+
+    // The in-flight placeholder tile clears once the upload settles.
+    expect(screen.queryByText(/Uploading|Almost there/)).toBeNull();
   });
 
-  it('ignores a text-only paste so caption typing is unaffected', async () => {
-    const { container } = renderComponent();
+  it('ignores a text-only paste so it never triggers an upload', async () => {
+    const { container, onSubmitted } = renderComponent();
 
     const event = firePaste(container.firstElementChild!, [
       { kind: 'string', type: 'text/plain' },
     ]);
 
-    // Not consumed, and no image was picked up.
     expect(event.defaultPrevented).toBe(false);
-    expect(screen.queryByAltText('Selected image preview')).toBeNull();
     expect(screen.getByText('Drop, paste or choose an image')).toBeTruthy();
+    expect(onSubmitted).not.toHaveBeenCalled();
   });
 
   it('accepts a dropped image', async () => {
-    renderComponent();
+    const { onSubmitted } = renderComponent();
 
     const dropZone = screen.getByText('Drop, paste or choose an image').closest('label')!;
     fireEvent.drop(dropZone, { dataTransfer: { files: [imageFile()] } });
 
-    expect(await screen.findByAltText('Selected image preview')).toBeTruthy();
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
+  });
+
+  it('accepts several dropped images and uploads each independently', async () => {
+    const { onSubmitted } = renderComponent();
+
+    const dropZone = screen.getByText('Drop, paste or choose an image').closest('label')!;
+    fireEvent.drop(dropZone, {
+      dataTransfer: { files: [imageFile('one.png'), imageFile('two.png')] },
+    });
+
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(2));
+    expect(callsTo('/api/submissions/upload')).toHaveLength(2);
   });
 
   it('rejects a non-image file with an inline message', async () => {
@@ -136,27 +190,19 @@ describe('GalleryStepSubmission input paths', () => {
 
     expect(await screen.findByText('Please choose a PNG, JPG or WebP image.')).toBeTruthy();
   });
+
+  it('stops accepting new images once the per-step limit is reached', () => {
+    const sixImages = Array.from({ length: 6 }, (_, i) => existingImage({ id: `sub-${i}` }));
+    renderComponent({ existingSubmissions: sixImages });
+
+    expect(screen.getByText(/maximum of 6 images/)).toBeTruthy();
+    expect(screen.queryByText('Add another image')).toBeNull();
+    expect(screen.queryByText('Drop, paste or choose an image')).toBeNull();
+  });
 });
 
-describe('GalleryStepSubmission submission lifecycle', () => {
-  it('creates only one submission when Submit is double-clicked', async () => {
-    const { container } = renderComponent();
-
-    firePaste(container.firstElementChild!, [
-      { kind: 'file', type: 'image/png', file: imageFile() },
-    ]);
-    await screen.findByAltText('Selected image preview');
-
-    const submit = screen.getByRole('button', { name: /Submit to gallery/ });
-    fireEvent.click(submit);
-    fireEvent.click(submit);
-
-    await waitFor(() => {
-      expect(submissionCalls()).toHaveLength(1);
-    });
-  });
-
-  it('keeps the image and caption when submitting fails', async () => {
+describe('GalleryStepSubmission upload failure handling', () => {
+  it('shows an inline error with retry/remove when an upload fails', async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/submissions/upload')) {
@@ -172,117 +218,143 @@ describe('GalleryStepSubmission submission lifecycle', () => {
     firePaste(container.firstElementChild!, [
       { kind: 'file', type: 'image/png', file: imageFile() },
     ]);
-    await screen.findByAltText('Selected image preview');
 
-    fireEvent.change(screen.getByLabelText('Caption (optional)'), {
-      target: { value: 'my office' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Submit to gallery/ }));
-
-    // Regex, because the component renders a typographic apostrophe.
-    expect(await screen.findByText(/We couldn.t submit your image\./)).toBeTruthy();
-    expect(screen.getByText('Storage is unavailable')).toBeTruthy();
-
-    // Nothing to re-drag or retype.
-    expect(screen.getByAltText('Selected image preview')).toBeTruthy();
-    expect((screen.getByLabelText('Caption (optional)') as HTMLTextAreaElement).value).toBe(
-      'my office'
-    );
-    expect(screen.getByRole('button', { name: /Try again/ })).toBeTruthy();
+    expect(await screen.findByText('Storage is unavailable')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Retry/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Remove/ })).toBeTruthy();
   });
 
-  it('reports the submission upward so the runner can persist it', async () => {
-    const { container, onSubmitted } = renderComponent();
+  it('retries the same file when Retry is clicked', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/submissions/upload')) {
+        return Promise.resolve({
+          json: async () => ({ success: false, error: 'Storage is unavailable' }),
+        } as Response);
+      }
+      return Promise.resolve({ json: async () => ({ success: true }) } as Response);
+    }) as typeof fetch;
 
+    const { container } = renderComponent();
     firePaste(container.firstElementChild!, [
       { kind: 'file', type: 'image/png', file: imageFile() },
     ]);
-    await screen.findByAltText('Selected image preview');
-    fireEvent.click(screen.getByRole('button', { name: /Submit to gallery/ }));
+    await screen.findByText('Storage is unavailable');
+
+    const uploadCallsBefore = callsTo('/api/submissions/upload').length;
+    fireEvent.click(screen.getByRole('button', { name: /Retry/ }));
 
     await waitFor(() => {
-      expect(onSubmitted).toHaveBeenCalledTimes(1);
+      expect(callsTo('/api/submissions/upload').length).toBeGreaterThan(uploadCallsBefore);
     });
-    expect(onSubmitted.mock.calls[0][0]).toMatchObject({ id: 'sub-1', step_id: STEP_ID });
+  });
+
+  it('removes the failed tile when Remove is clicked', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/submissions/upload')) {
+        return Promise.resolve({
+          json: async () => ({ success: false, error: 'Storage is unavailable' }),
+        } as Response);
+      }
+      return Promise.resolve({ json: async () => ({ success: true }) } as Response);
+    }) as typeof fetch;
+
+    const { container } = renderComponent();
+    firePaste(container.firstElementChild!, [
+      { kind: 'file', type: 'image/png', file: imageFile() },
+    ]);
+    await screen.findByText('Storage is unavailable');
+
+    fireEvent.click(screen.getByRole('button', { name: /Remove/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Storage is unavailable')).toBeNull();
+    });
+    // Back to the empty dropzone -- nothing left staged.
+    expect(screen.getByText('Drop, paste or choose an image')).toBeTruthy();
   });
 });
 
-describe('GalleryStepSubmission editing', () => {
-  const existing = {
-    id: 'sub-1',
-    step_id: STEP_ID,
-    content: 'my first caption',
-    image_url: EXISTING_IMAGE,
-    updated_at: '2026-09-01T10:00:00.000Z',
-  };
+describe('GalleryStepSubmission existing images', () => {
+  it('renders one tile per existing image, each with its own caption', () => {
+    renderComponent({
+      existingSubmissions: [
+        existingImage({ id: 'sub-a', content: 'caption A' }),
+        existingImage({ id: 'sub-b', content: 'caption B' }),
+      ],
+    });
 
-  it('opens in the submitted state', () => {
-    renderComponent({ existingSubmission: existing });
-
-    expect(screen.getByText('Submitted')).toBeTruthy();
-    expect(screen.getByText('Look at the main screen 👀')).toBeTruthy();
+    expect(screen.getAllByAltText('Your submitted image')).toHaveLength(2);
+    expect(screen.getByDisplayValue('caption A')).toBeTruthy();
+    expect(screen.getByDisplayValue('caption B')).toBeTruthy();
+    // A second, independent add control is still offered (well under the cap).
+    expect(screen.getByText('Add another image')).toBeTruthy();
   });
 
-  it('sends the stored image_url on a caption-only edit', async () => {
-    renderComponent({ existingSubmission: existing });
-
-    fireEvent.click(screen.getByRole('button', { name: /Edit submission/ }));
-
-    fireEvent.change(await screen.findByLabelText('Caption (optional)'), {
-      target: { value: 'a better caption' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
-
-    await waitFor(() => {
-      expect(submissionCalls()).toHaveLength(1);
+  it('auto-saves a caption edit on blur', async () => {
+    const { onSubmitted } = renderComponent({
+      existingSubmissions: [existingImage({ id: 'sub-a', content: 'old caption' })],
     });
 
-    const body = JSON.parse(String((submissionCalls()[0][1] as RequestInit).body));
-    // Sending null here would blank the image on the projected wall.
-    expect(body.imageUrl).toBe(EXISTING_IMAGE);
-    expect(body.content).toBe('a better caption');
+    const input = screen.getByDisplayValue('old caption');
+    fireEvent.change(input, { target: { value: 'new caption' } });
+    fireEvent.blur(input);
 
-    // No upload should have happened - no new file was chosen.
-    const fetchMock = global.fetch as unknown as { mock: { calls: unknown[][] } };
-    expect(
-      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/submissions/upload'))
-    ).toHaveLength(0);
+    await waitFor(() => expect(callsTo('/api/submissions', 'POST')).toHaveLength(1));
+
+    const body = JSON.parse(String((callsTo('/api/submissions', 'POST')[0][1] as RequestInit).body));
+    expect(body.submissionId).toBe('sub-a');
+    expect(body.content).toBe('new caption');
+    // A caption-only edit must never re-send an imageUrl -- doing so would
+    // route through the "brand new image" path on the server.
+    expect(body.imageUrl).toBeUndefined();
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
   });
 
-  it('uploads and swaps the url when the image is replaced', async () => {
-    const { container } = renderComponent({ existingSubmission: existing });
-
-    fireEvent.click(screen.getByRole('button', { name: /Edit submission/ }));
-    await screen.findByLabelText('Caption (optional)');
-
-    firePaste(container.firstElementChild!, [
-      { kind: 'file', type: 'image/png', file: imageFile('replacement.png') },
-    ]);
-    // The remove control only appears once a NEW file is staged, so this is the
-    // signal that the paste landed (the existing image already fills the
-    // preview slot). Also flushes the raw dispatchEvent's state update.
-    await screen.findByLabelText('Remove selected image');
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
-
-    await waitFor(() => {
-      expect(submissionCalls()).toHaveLength(1);
+  it('does not save when the caption is blurred unchanged', async () => {
+    renderComponent({
+      existingSubmissions: [existingImage({ id: 'sub-a', content: 'same caption' })],
     });
 
-    const body = JSON.parse(String((submissionCalls()[0][1] as RequestInit).body));
-    expect(body.imageUrl).toBe('https://example.test/uploaded.webp');
+    const input = screen.getByDisplayValue('same caption');
+    fireEvent.blur(input);
+
+    // Give any accidental async save a chance to land before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callsTo('/api/submissions', 'POST')).toHaveLength(0);
   });
 
-  it('restores the submitted state on cancel', async () => {
-    renderComponent({ existingSubmission: existing });
-
-    fireEvent.click(screen.getByRole('button', { name: /Edit submission/ }));
-    fireEvent.change(await screen.findByLabelText('Caption (optional)'), {
-      target: { value: 'discard me' },
+  it('deletes an image and reports it upward', async () => {
+    const { onDeleted } = renderComponent({
+      existingSubmissions: [existingImage({ id: 'sub-a' })],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(await screen.findByText('Submitted')).toBeTruthy();
-    expect(submissionCalls()).toHaveLength(0);
+    fireEvent.click(screen.getByLabelText('Delete image'));
+
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('sub-a'));
+    expect(callsTo(`/api/submissions/sub-a`, 'DELETE')).toHaveLength(1);
+  });
+
+  it('shows an inline error and keeps the tile when delete fails', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        return Promise.resolve({
+          json: async () => ({ success: false, error: 'Could not delete this image.' }),
+        } as Response);
+      }
+      return Promise.resolve({ json: async () => ({ success: true }) } as Response);
+    }) as typeof fetch;
+
+    const { onDeleted } = renderComponent({
+      existingSubmissions: [existingImage({ id: 'sub-a' })],
+    });
+
+    fireEvent.click(screen.getByLabelText('Delete image'));
+
+    expect(await screen.findByText('Could not delete this image.')).toBeTruthy();
+    expect(onDeleted).not.toHaveBeenCalled();
+    // The tile itself is still there -- deletion failed, nothing to hide.
+    expect(screen.getByAltText('Your submitted image')).toBeTruthy();
   });
 });

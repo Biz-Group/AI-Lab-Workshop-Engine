@@ -53,6 +53,12 @@ export function mapPromptPackEntries(
   modules: unknown[],
   submissions: unknown[]
 ): PromptPackEntry[] {
+  // A step can hold several submission rows (multi-image gallery steps), but
+  // the Prompt Pack shows one image per step -- this Map keeps the LAST row
+  // it sees for a given step_id, so it relies on the caller passing rows in
+  // ascending created_at order (see prompt-pack.ts's buildPromptPackData)
+  // for "most recent wins" to actually be true, rather than whatever order
+  // the query happened to return.
   const submissionByStepId = new Map(
     submissions
       .map((submission) => {

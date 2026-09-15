@@ -244,14 +244,17 @@ export function PresenterView({
       return;
     }
 
+    // Distinct participants, not row count -- a multi-image gallery step can
+    // hold several submission rows for one participant, and counting rows
+    // directly would push this above the real participant count.
     const supabase = createClient();
-    const { count } = await supabase
+    const { data } = await supabase
       .from('submissions')
-      .select('id', { count: 'exact', head: true })
+      .select('participant_id')
       .eq('session_id', initialSession.id)
       .eq('step_id', stepId);
 
-    setCompletedCount(count || 0);
+    setCompletedCount(new Set((data ?? []).map((row) => row.participant_id)).size);
   }, [initialSession.id]);
 
   const refreshDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

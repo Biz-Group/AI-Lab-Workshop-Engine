@@ -88,13 +88,17 @@ export const ParticipantList = memo(function ParticipantList({
       stuckParticipantIds.delete(dismissedId);
     }
 
-    const completedStepsByParticipant = new Map<string, string[]>();
+    // A step can now hold several submission rows (multi-image gallery
+    // steps), so this dedups by step_id per participant -- a Set, not an
+    // array, or a participant with 3 images on one step would show 3
+    // "completed steps" instead of 1.
+    const completedStepsByParticipant = new Map<string, Set<string>>();
     for (const submission of submissionsData || []) {
       const participantSteps = completedStepsByParticipant.get(submission.participant_id);
       if (participantSteps) {
-        participantSteps.push(submission.step_id);
+        participantSteps.add(submission.step_id);
       } else {
-        completedStepsByParticipant.set(submission.participant_id, [submission.step_id]);
+        completedStepsByParticipant.set(submission.participant_id, new Set([submission.step_id]));
       }
     }
 
@@ -103,7 +107,7 @@ export const ParticipantList = memo(function ParticipantList({
       return {
         ...participant,
         is_stuck: stuckParticipantIds.has(participant.id),
-        completed_steps: completedStepsByParticipant.get(participant.id) || [],
+        completed_steps: Array.from(completedStepsByParticipant.get(participant.id) ?? []),
         facilitator_notes: participant.facilitator_notes || null,
       };
     });

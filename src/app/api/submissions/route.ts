@@ -5,6 +5,8 @@ import { requireParticipantSession } from '@/lib/server/participant-session';
 import { getSubmissionImagesPublicBaseUrl } from '@/lib/supabase/config';
 import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit';
 
+const MAX_IMAGES_PER_STEP = 6;
+
 const submissionSchema = z.object({
   participantId: z.string().uuid(),
   sessionId: z.string().uuid(),
@@ -12,10 +14,13 @@ const submissionSchema = z.object({
   content: z.string().max(10000).optional().default(''),
   imageUrl: z.string().url().max(2000).optional().nullable(),
   // Only ever sent alongside a fresh image upload (see GalleryStepSubmission
-  // handleSubmit) -- a caption-only edit omits both, and the upsert below
+  // handleSubmit) -- a caption-only edit omits both, and the write below
   // must leave whatever dimensions are already stored untouched in that case.
   imageWidth: z.number().int().positive().max(20000).optional(),
   imageHeight: z.number().int().positive().max(20000).optional(),
+  // Present when editing one already-saved image (caption and/or a replaced
+  // file); absent when this is a brand-new image for the step.
+  submissionId: z.string().uuid().optional(),
 }).refine(
   (data) => data.content.trim().length > 0 || (data.imageUrl != null && data.imageUrl.length > 0),
   { message: 'Either text content or an image is required' }
@@ -69,8 +74,11 @@ export async function POST(request: NextRequest) {
 
     // A gallery step exists to put an image on the shared screen, so the base
     // schema's "text OR image" rule is not enough here. The Zod refine cannot
-    // express this because it does not know the step's type.
-    if (stepResult.data.is_gallery_step && !validatedData.imageUrl) {
+    // express this because it does not know the step's type. Only applies to
+    // a brand-new image (no submissionId) -- an edit to an existing row
+    // already has an image on file even when this request only changes the
+    // caption.
+    if (stepResult.data.is_gallery_step && !validatedData.submissionId && !validatedData.imageUrl) {
       return NextResponse.json(
         { success: false, error: 'This activity requires an image' },
         { status: 400 }
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (validatedData.imageUrl) {
-      const allowedPrefix = `${getSubmissionImagesPublicBaseUrl()}/${validatedData.sessionId}/${validatedData.participantId}/${validatedData.stepId}.`;
+      const allowedPrefix = `${getSubmissionImagesPublicBaseUrl()}/${validatedData.sessionId}/${validatedData.participantId}/${validatedData.stepId}/`;
       if (!validatedData.imageUrl.startsWith(allowedPrefix)) {
         return NextResponse.json(
           { success: false, error: 'Image URL does not belong to this submission' },
@@ -87,35 +95,90 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: submission, error } = await supabase
-      .from('submissions')
-      .upsert(
-        {
+    let submission;
+
+    if (validatedData.submissionId) {
+      // Editing one already-saved image: verify it's actually this
+      // participant's row for this step before touching it.
+      const { data: existing } = await supabase
+        .from('submissions')
+        .select('id')
+        .eq('id', validatedData.submissionId)
+        .eq('participant_id', validatedData.participantId)
+        .eq('session_id', validatedData.sessionId)
+        .eq('step_id', validatedData.stepId)
+        .single();
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, error: 'Submission not found' },
+          { status: 404 }
+        );
+      }
+
+      const { data, error } = await supabase
+        .from('submissions')
+        .update({
+          content: validatedData.content,
+          updated_at: new Date().toISOString(),
+          // Omitted (not set to null/undefined) unless a fresh file came
+          // with this edit, so the UPDATE's generated SET clause never
+          // touches these columns and whatever was already stored survives.
+          ...(validatedData.imageUrl !== undefined && { image_url: validatedData.imageUrl }),
+          ...(validatedData.imageWidth !== undefined && { image_width: validatedData.imageWidth }),
+          ...(validatedData.imageHeight !== undefined && { image_height: validatedData.imageHeight }),
+        })
+        .eq('id', validatedData.submissionId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Submission error:', error);
+        return NextResponse.json(
+          { success: false, error: 'Failed to save submission' },
+          { status: 500 }
+        );
+      }
+      submission = data;
+    } else {
+      // A brand-new image: cap how many one participant can pile onto a
+      // single step so the wall/gallery can't be dominated by one person and
+      // the upload grid stays usable on mobile.
+      const { count } = await supabase
+        .from('submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('participant_id', validatedData.participantId)
+        .eq('step_id', validatedData.stepId);
+
+      if ((count ?? 0) >= MAX_IMAGES_PER_STEP) {
+        return NextResponse.json(
+          { success: false, error: `You've reached the limit of ${MAX_IMAGES_PER_STEP} images for this activity.` },
+          { status: 400 }
+        );
+      }
+
+      const { data, error } = await supabase
+        .from('submissions')
+        .insert({
           participant_id: validatedData.participantId,
           session_id: validatedData.sessionId,
           step_id: validatedData.stepId,
           content: validatedData.content,
           image_url: validatedData.imageUrl ?? null,
-          updated_at: new Date().toISOString(),
-          // Omitted (not set to null) on a caption-only edit, so the upsert's
-          // generated SET clause never touches these columns and whatever was
-          // captured at the original upload survives.
           ...(validatedData.imageWidth !== undefined && { image_width: validatedData.imageWidth }),
           ...(validatedData.imageHeight !== undefined && { image_height: validatedData.imageHeight }),
-        },
-        {
-          onConflict: 'participant_id,step_id',
-        }
-      )
-      .select()
-      .single();
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Submission error:', error);
-      return NextResponse.json(
-        { success: false, error: 'Failed to save submission' },
-        { status: 500 }
-      );
+      if (error) {
+        console.error('Submission error:', error);
+        return NextResponse.json(
+          { success: false, error: 'Failed to save submission' },
+          { status: 500 }
+        );
+      }
+      submission = data;
     }
 
     await supabase

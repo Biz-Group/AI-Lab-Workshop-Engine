@@ -18,6 +18,13 @@ export const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as
 /** Matches MAX_SIZE in the upload route and the bucket's file_size_limit. */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Matches MAX_IMAGES_PER_STEP in src/app/api/submissions/route.ts, which is
+ * the actual enforcement point -- this is just so the UI can disable "add
+ * image" before a rejected request round-trips.
+ */
+export const MAX_IMAGES_PER_STEP = 6;
+
 /** Leave headroom under the hard limit rather than encoding right up to it. */
 const DOWNSCALE_TRIGGER_BYTES = 4 * 1024 * 1024;
 
@@ -163,17 +170,28 @@ export async function prepareImageForUpload(file: File): Promise<PreparedImage> 
  * behaving normally.
  */
 export function getImageFromClipboard(clipboardData: DataTransfer | null): File | null {
-  if (!clipboardData) return null;
+  return getImagesFromClipboard(clipboardData)[0] ?? null;
+}
 
+/**
+ * Every image in a paste event's clipboard payload, not just the first --
+ * lets a multi-image paste add more than one tile at once. Returns an empty
+ * array (never null) when the clipboard holds no image, so callers can
+ * `.length` it directly.
+ */
+export function getImagesFromClipboard(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+
+  const files: File[] = [];
   for (const item of Array.from(clipboardData.items)) {
     if (item.kind !== 'file') continue;
     if (!item.type.startsWith('image/')) continue;
 
     const file = item.getAsFile();
-    if (file) return file;
+    if (file) files.push(file);
   }
 
-  return null;
+  return files;
 }
 
 /** True when a paste carries an image, without consuming it. */

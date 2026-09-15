@@ -31,6 +31,9 @@ export async function POST(request: NextRequest) {
     const participantId = formData.get('participantId') as string | null;
     const sessionId = formData.get('sessionId') as string | null;
     const stepId = formData.get('stepId') as string | null;
+    // Present only when replacing the file on an already-saved image (an
+    // edit); absent for a brand-new image. See storagePath below.
+    const submissionId = formData.get('submissionId') as string | null;
 
     if (!file || !participantId || !sessionId || !stepId) {
       return NextResponse.json(
@@ -91,6 +94,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Editing an existing image's file (not a brand-new upload) reuses that
+    // row's own storage key, so the ownership check happens before touching
+    // storage -- otherwise a forged submissionId could overwrite someone
+    // else's object.
+    if (submissionId) {
+      const { data: existing } = await supabase
+        .from('submissions')
+        .select('id')
+        .eq('id', submissionId)
+        .eq('participant_id', participantId)
+        .eq('session_id', sessionId)
+        .eq('step_id', stepId)
+        .single();
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, error: 'Submission not found' },
+          { status: 404 }
+        );
+      }
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     if (!verifyMagicBytes(arrayBuffer, file.type)) {
       return NextResponse.json(
@@ -100,14 +125,20 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
-    const storagePath = `${sessionId}/${participantId}/${stepId}.${ext}`;
+    // A brand-new image gets its own random key so it can never collide with
+    // (or overwrite) a sibling image for the same participant+step; editing
+    // an existing image's file reuses that row's own id as the key so the
+    // replacement lands on the same storage object instead of orphaning it.
+    const storagePath = submissionId
+      ? `${sessionId}/${participantId}/${stepId}/${submissionId}.${ext}`
+      : `${sessionId}/${participantId}/${stepId}/${crypto.randomUUID()}.${ext}`;
     const buffer = Buffer.from(arrayBuffer);
 
     const { error: uploadError } = await supabase.storage
       .from('submission-images')
       .upload(storagePath, buffer, {
         contentType: file.type,
-        upsert: true,
+        upsert: Boolean(submissionId),
       });
 
     if (uploadError) {

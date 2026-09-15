@@ -75,11 +75,17 @@ export async function buildPromptPackData(
     })),
   }));
 
+  // Ascending order matters: a step can now hold several submission rows
+  // (multi-image gallery steps), and mapPromptPackEntries's Map keeps the
+  // LAST row it sees per step_id -- ascending created_at makes "most recent
+  // image wins" the actual, deterministic behavior instead of whatever order
+  // Postgres happens to return.
   const { data: submissions, error: submissionsError } = await supabase
     .from('submissions')
     .select('step_id, content, image_url, created_at, updated_at')
     .eq('session_id', sessionId)
-    .eq('participant_id', participantId);
+    .eq('participant_id', participantId)
+    .order('created_at', { ascending: true });
 
   if (submissionsError) {
     throw new Error('Failed to fetch participant submissions');

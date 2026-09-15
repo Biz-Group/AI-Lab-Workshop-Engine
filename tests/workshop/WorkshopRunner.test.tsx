@@ -226,6 +226,23 @@ describe('WorkshopRunner gallery steps', () => {
         });
       }
 
+      // A caption-only edit (auto-saved by GalleryStepSubmission's ImageTile
+      // on blur) must echo back the row it just updated so WorkshopRunner's
+      // onSubmitted can find and replace the right entry by id.
+      if (url.endsWith('/api/submissions') && init?.method === 'POST') {
+        const body = init.body ? JSON.parse(String(init.body)) : {};
+        return mockJsonResponse({
+          success: true,
+          submission: {
+            id: body.submissionId ?? 'sub-new',
+            step_id: body.stepId,
+            content: body.content ?? '',
+            image_url: body.imageUrl ?? null,
+            updated_at: new Date().toISOString(),
+          },
+        });
+      }
+
       return mockJsonResponse({ success: true });
     }) as typeof fetch;
   });
@@ -286,13 +303,16 @@ describe('WorkshopRunner gallery steps', () => {
     // Derived from the persisted submission, not from a transient just-submitted
     // flag, so it survives navigating away and back.
     expect(screen.getByText('Submitted')).toBeTruthy();
-    expect(screen.getByText('Your image has been sent to the gallery.')).toBeTruthy();
     expect(screen.getByText('Look at the main screen 👀')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Edit submission/ })).toBeTruthy();
+    expect(screen.getByAltText('Your submitted image')).toBeTruthy();
+    expect(screen.getByDisplayValue('my futuristic office')).toBeTruthy();
+    // A step can hold more than one image now, so the zero-state prompt is
+    // gone but the "add another" control stays available.
     expect(screen.queryByText('Drop, paste or choose an image')).toBeNull();
+    expect(screen.getByText('Add another image')).toBeTruthy();
   });
 
-  it('lets an existing submission be edited without re-choosing an image', async () => {
+  it('auto-saves a caption edit on an existing gallery image without touching its file', async () => {
     render(
       <WorkshopRunner
         {...galleryProps([
@@ -306,15 +326,21 @@ describe('WorkshopRunner gallery steps', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Edit submission/ }));
+    const caption = screen.getByDisplayValue('my futuristic office');
+    fireEvent.change(caption, { target: { value: 'an even better office' } });
+    fireEvent.blur(caption);
 
-    // Caption-only edits must be possible: Save is enabled off the stored
-    // image, with no new file selected.
-    const save = await screen.findByRole('button', { name: /Save changes/ });
-    expect((save as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByLabelText('Caption (optional)') as HTMLTextAreaElement).value).toBe(
-      'my futuristic office'
-    );
+    // Persisted (echoed back by the mocked POST) and reflected in the same
+    // tile -- no separate "edit" mode, no re-upload of the image.
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('an even better office')).toBeTruthy();
+    });
+    expect(
+      (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((call) => {
+        if (!String(call[0]).endsWith('/api/submissions/upload')) return false;
+        return true;
+      })
+    ).toBe(false);
   });
 
   it('leaves a guided step fully intact', async () => {

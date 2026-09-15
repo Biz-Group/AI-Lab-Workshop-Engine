@@ -175,6 +175,12 @@ beforeEach(() => {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 
+  // jsdom doesn't implement scrolling -- the wall's scroll-based masonry
+  // stage (replacing the old page-based one) calls these on step changes and
+  // PageUp/PageDown, so without a stub they throw instead of no-op'ing.
+  Element.prototype.scrollTo = vi.fn();
+  Element.prototype.scrollBy = vi.fn();
+
   global.fetch = vi.fn(() =>
     Promise.resolve({ json: async () => ({ success: true }) } as Response)
   ) as typeof fetch;
